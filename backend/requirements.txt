@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+pydantic-settings
+ortools
+pytest
+python-dotenv
+passlib
+bcrypt
+pyjwt
