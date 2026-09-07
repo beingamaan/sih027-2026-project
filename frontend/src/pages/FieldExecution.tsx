@@ -16,6 +16,7 @@ export const FieldExecution: React.FC = () => {
   const { taskId } = useParams();
   const navigate = useNavigate();
   const id = taskId || '1';
+  const [taskDetail, setTaskDetail] = useState<any>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [timestamps, setTimestamps] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -24,6 +25,12 @@ export const FieldExecution: React.FC = () => {
   const [lossNotes, setLossNotes] = useState('');
   const [online, setOnline] = useState(navigator.onLine);
   const [offlineQueue, setOfflineQueue] = useState<string[]>([]);
+
+  React.useEffect(() => {
+    api.get(`/api/tasks/${id}`)
+      .then(res => setTaskDetail(res.data))
+      .catch(err => console.error('Failed to load task detail', err));
+  }, [id]);
 
   React.useEffect(() => {
     const h1 = () => setOnline(true);
@@ -84,8 +91,12 @@ export const FieldExecution: React.FC = () => {
         <button onClick={() => navigate('/field')} className="flex items-center gap-1 text-sm text-blue-200 mb-2">
           <ArrowLeft size={16} /> Back
         </button>
-        <h1 className="text-lg font-bold">Block Execution</h1>
-        <p className="text-xs text-blue-200">Task ID: {id}</p>
+        <h1 className="text-lg font-bold">
+          {taskDetail ? `${taskDetail.task_code}` : `Task #${id}`}
+        </h1>
+        <p className="text-xs text-blue-200">
+          {taskDetail ? `${taskDetail.department} · ${taskDetail.work_type}` : `Task ID: ${id}`}
+        </p>
       </div>
 
       {!online && (

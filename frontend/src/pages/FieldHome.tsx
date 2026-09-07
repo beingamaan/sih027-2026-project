@@ -26,12 +26,13 @@ export const FieldHome: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    api.get('/api/tasks').then(r => setTasks(Array.isArray(r.data) ? r.data : []))
+    api.get('/api/tasks/field').then(r => setTasks(Array.isArray(r.data) ? r.data : []))
       .catch(() => setTasks([]))
       .finally(() => setLoading(false));
   }, []);
 
-  const fieldTasks = tasks.slice(0, 6);
+  // Backend already filters: only emergency + planner-scheduled tasks are returned
+  const fieldTasks = tasks;
 
   return (
     <div className="min-h-screen bg-slate-100 pb-20">
@@ -61,26 +62,58 @@ export const FieldHome: React.FC = () => {
           <div className="text-center py-12 text-slate-500">Loading blocks...</div>
         ) : fieldTasks.length === 0 ? (
           <div className="text-center py-12 text-slate-400">No assigned blocks</div>
-        ) : fieldTasks.map((t, i) => {
+        ) : fieldTasks.map((t) => {
           const r = readinessLabel(t);
+          const isCompleted = t.status === 'LINE_HANDED_BACK' || t.status === 'WORK_COMPLETED';
+          const isStatutory = t.lane === 'B2_STATUTORY';
+
           return (
-            <button key={t.id} onClick={() => navigate(`/field/execute/${t.id}`)} className="w-full bg-white rounded-xl border border-slate-200 p-4 text-left active:bg-slate-50 transition-colors">
+            <button
+              key={t.id}
+              onClick={() => navigate(`/field/execute/${t.id}`)}
+              className="w-full bg-white rounded-xl border border-slate-200 p-4 text-left active:bg-slate-50 transition-colors shadow-xs"
+            >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="font-bold text-slate-900 text-sm">BLK-2026-{String(140 + i).padStart(4, '0')}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Station A — Station B</p>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 text-sm">{t.task_code}</span>
+                    {isCompleted ? (
+                      <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-100 text-emerald-800">
+                        ✅ Completed
+                      </span>
+                    ) : isStatutory ? (
+                      <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-red-100 text-red-800 animate-pulse">
+                        ⚠️ Statutory Due
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-100 text-blue-800">
+                        ⏰ Scheduled
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs font-medium text-slate-700 mt-1">{t.work_type.replace(/_/g, ' ')}</p>
                 </div>
-                <ChevronRight size={20} className="text-slate-400" />
+                <ChevronRight size={20} className="text-slate-400 shrink-0" />
               </div>
+
               <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-slate-600">
-                <span className="flex items-center gap-1"><MapPin size={12} />{t.km_from}–{t.km_to} km</span>
-                <span className="flex items-center gap-1"><Clock size={12} />02:00–05:00</span>
-                <span className="flex items-center gap-1"><Wrench size={12} />{t.work_type.replace(/_/g, ' ')}</span>
+                <span className="flex items-center gap-1"><MapPin size={12} />KM {t.km_from} – {t.km_to}</span>
+                <span className="flex items-center gap-1"><Clock size={12} />Window: 02:00 – 05:00</span>
+                <span className="flex items-center gap-1"><Wrench size={12} />{t.department}</span>
               </div>
-              <div className="flex items-center gap-2 mt-3">
-                <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-slate-200 text-slate-700">{t.department}</span>
-                <span className={`px-2 py-0.5 text-[10px] font-semibold rounded ${r.color}`}>Readiness: {r.level}</span>
-                <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-blue-100 text-blue-700">Plan V3</span>
+
+              <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-slate-100 text-slate-700">
+                    {t.lane}
+                  </span>
+                  <span className={`px-2 py-0.5 text-[10px] font-semibold rounded ${r.color}`}>
+                    Readiness: {r.level}
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold text-blue-600 flex items-center gap-1">
+                  Execute →
+                </span>
               </div>
             </button>
           );

@@ -160,7 +160,7 @@ export const TaskDetailsView: React.FC<TaskDetailsProps> = ({
             <h3 className="text-base font-bold text-slate-900">Prerequisite Readiness Assessment</h3>
             <p className="text-xs text-slate-500">Six-point operational checklist required prior to Plan A entry</p>
           </div>
-          {readiness && <ReadinessBadge level={readiness.level} />}
+          {readiness && <ReadinessBadge level={readiness.level || 'LOW'} />}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">

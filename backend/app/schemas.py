@@ -46,6 +46,7 @@ class PlanOut(PlanBase):
     solver_status: str
     approval_status: str
     created_at: datetime
+    tasks: Optional[List[dict]] = None
     class Config:
         orm_mode = True
 

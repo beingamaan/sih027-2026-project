@@ -7,26 +7,40 @@ import { Timeline } from '../components/planning/Timeline';
 import { Button } from '../components/common/Button';
 import { Loading } from '../components/common/Loading';
 import { ErrorMessage } from '../components/common/ErrorMessage';
-import { generatePlans, getPlans, getPlanDetails } from '../services/planApi';
+import { generatePlans, getPlans, getPlanDetails, approvePlan } from '../services/planApi';
 import { Plan } from '../types';
-import { Cpu, ArrowRight, ShieldAlert } from 'lucide-react';
+import { Cpu, ArrowRight, CheckCircle2, ShieldAlert } from 'lucide-react';
 
 export const Planning: React.FC = () => {
   const navigate = useNavigate();
-  const [plans, setPlans] = useState<{ plan_a: Plan; plan_b: Plan } | null>(null);
-  const [allPlans, setAllPlans] = useState<Plan[]>([]);
+  const [plans, setPlans] = useState<{ plan_a: Plan; plan_b?: Plan } | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [generating, setGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [approving, setApproving] = useState(false);
 
   const loadExistingPlans = async () => {
     try {
       const list = await getPlans();
-      setAllPlans(list);
       if (list.length > 0) {
-        const fullPlan = await getPlanDetails(list[0].id);
-        setSelectedPlan(fullPlan);
+        const latest = list[list.length - 1];
+        const fullA = await getPlanDetails(latest.id);
+        let planData: { plan_a: Plan; plan_b?: Plan } = { plan_a: fullA };
+        // Only generate a synthetic Plan B if the latest plan is NOT approved
+        if (latest.approval_status !== 'APPROVED') {
+          const fullB = {
+            ...fullA,
+            id: latest.id + 100,
+            plan_code: fullA.plan_code.replace('A', 'B'),
+            plan_type: 'PLAN_B' as const,
+            total_cost: 450,
+            train_impact_cost: 350
+          };
+          planData.plan_b = fullB;
+        }
+        setPlans(planData);
+        setSelectedPlan(fullA);
       }
     } catch (e) {
       console.error(e);
@@ -36,6 +50,20 @@ export const Planning: React.FC = () => {
   useEffect(() => {
     loadExistingPlans();
   }, []);
+
+  const handleApprove = async () => {
+    if (!selectedPlan) return;
+    setApproving(true);
+    try {
+      const realId = selectedPlan.id > 100 ? selectedPlan.id - 100 : selectedPlan.id;
+      await approvePlan(realId);
+      await loadExistingPlans();
+    } catch (err: any) {
+      console.error('Approve failed:', err);
+    } finally {
+      setApproving(false);
+    }
+  };
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -54,7 +82,14 @@ export const Planning: React.FC = () => {
       setGenerationStep('Generating Plan A and Plan B matrices...');
       
       const fullA = await getPlanDetails(res.planId);
-      const fullB = { ...fullA, id: res.planId + 100, plan_code: fullA.plan_code.replace('A', 'B'), plan_type: 'PLAN_B' as const, total_cost: 450, train_impact_cost: 350 };
+      const fullB = { 
+        ...fullA, 
+        id: res.planId + 100, 
+        plan_code: fullA.plan_code.replace('A', 'B'), 
+        plan_type: 'PLAN_B' as const, 
+        total_cost: 450, 
+        train_impact_cost: 350 
+      };
       
       setPlans({ plan_a: fullA, plan_b: fullB });
       setSelectedPlan(fullA);
@@ -97,46 +132,76 @@ export const Planning: React.FC = () => {
         </div>
       )}
 
-      {/* Plan Cards Row */}
+      {/* Plan Display */}
       {plans && !generating && (
         <div className="space-y-8 my-6 animate-fadeIn">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <PlanCard
-              plan={plans.plan_a}
-              selected={selectedPlan?.id === plans.plan_a.id}
-              onSelect={() => setSelectedPlan(plans.plan_a)}
-            />
-            <PlanCard
-              plan={plans.plan_b}
-              selected={selectedPlan?.id === plans.plan_b.id}
-              onSelect={() => setSelectedPlan(plans.plan_b)}
-            />
-          </div>
-
-          <PlanComparison planA={plans.plan_a} planB={plans.plan_b} />
-
-          {/* Timeline */}
-          {selectedPlan && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900">
-                    Schedule Timeline: {selectedPlan.plan_code}
-                  </h3>
-                  <p className="text-xs text-slate-500">Visual block window assignment across corridor sections</p>
-                </div>
-
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => navigate(`/plans/${selectedPlan.id}`)}
-                  icon={<ArrowRight size={14} />}
-                >
-                  Inspect & Authorize Plan
-                </Button>
+          {plans.plan_b ? (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <PlanCard
+                  plan={plans.plan_a}
+                  selected={selectedPlan?.id === plans.plan_a.id}
+                  onSelect={() => setSelectedPlan(plans.plan_a)}
+                />
+                <PlanCard
+                  plan={plans.plan_b}
+                  selected={selectedPlan?.id === plans.plan_b?.id}
+                  onSelect={() => setSelectedPlan(plans.plan_b || null)}
+                />
               </div>
 
-              <Timeline tasks={selectedPlan.tasks || []} />
+              <PlanComparison planA={plans.plan_a} planB={plans.plan_b} />
+
+              {/* Schedule Timeline */}
+              {selectedPlan && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-900">
+                        Schedule Timeline: {selectedPlan.plan_code}
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Visual block window assignment across corridor sections
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="success"
+                        size="sm"
+                        loading={approving}
+                        disabled={selectedPlan.approval_status === 'APPROVED'}
+                        onClick={handleApprove}
+                        icon={<CheckCircle2 size={15} />}
+                      >
+                        {selectedPlan.approval_status === 'APPROVED' ? 'Plan Approved' : 'Approve Plan'}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => navigate(`/plans/${selectedPlan.id}`)}
+                        icon={<ArrowRight size={14} />}
+                      >
+                        Inspect & Authorize Plan
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Timeline tasks={selectedPlan.tasks || []} />
+                </div>
+              )}
+            </>
+          ) : (
+            // Only Plan A (approved) – simple view with a button
+            <div className="flex justify-center mt-4">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => navigate(`/plans/${plans.plan_a.id}`)}
+                icon={<ArrowRight size={14} />}
+              >
+                View Approved Plan Details
+              </Button>
             </div>
           )}
         </div>

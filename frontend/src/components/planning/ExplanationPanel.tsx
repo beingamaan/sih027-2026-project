@@ -30,6 +30,25 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({ task }) => {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 p-3.5 rounded-lg border border-slate-200">
+        <div>
+          <span className="text-slate-500 font-medium">Corridor Section Origin:</span>
+          <p className="font-bold text-blue-700 mt-0.5">
+            {task.block_window_id % 3 === 1 
+              ? 'SEC-1: NDLS - GZB (New Delhi ➔ Ghaziabad)' 
+              : task.block_window_id % 3 === 2 
+              ? 'SEC-2: GZB - MB (Ghaziabad ➔ Moradabad)' 
+              : 'SEC-3: MB - BE (Moradabad ➔ Bareilly)'}
+          </p>
+        </div>
+        <div>
+          <span className="text-slate-500 font-medium">Kilometer Location:</span>
+          <p className="font-bold text-slate-800 mt-0.5">
+            KM {task.km_from || 0} – {task.km_to || 15} km (UP Main Line)
+          </p>
+        </div>
+      </div>
+
       <div className="p-3.5 bg-blue-50/50 rounded-lg border border-blue-100 text-xs text-slate-800 leading-relaxed font-medium">
         {task.explanation || `Scheduled in Block Window #${task.block_window_id} because gang & machinery prerequisites are satisfied, corridor train impact is minimized, and deadline is respected.`}
       </div>

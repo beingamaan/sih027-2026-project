@@ -18,11 +18,12 @@ export const FieldTasks: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedDept, setSelectedDept] = useState<string>('ALL');
   const [checks, setChecks] = useState<boolean[]>(new Array(CHECKLIST_ITEMS.length).fill(false));
   const [acknowledged, setAcknowledged] = useState<Record<number, string>>({});
 
   useEffect(() => {
-    api.get('/api/tasks').then(r => setTasks(Array.isArray(r.data) ? r.data : []))
+    api.get('/api/tasks/field').then(r => setTasks(Array.isArray(r.data) ? r.data : []))
       .catch(() => setTasks([]))
       .finally(() => setLoading(false));
   }, []);
@@ -47,17 +48,41 @@ export const FieldTasks: React.FC = () => {
     return <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-100 text-blue-700">B1 Planned</span>;
   };
 
+  // Backend already filters: only emergency + planner-scheduled tasks are returned
+  const fieldTasks = tasks;
+
+  const filteredTasks = selectedDept === 'ALL' 
+    ? fieldTasks 
+    : fieldTasks.filter(t => t.department === selectedDept);
+
   return (
     <div className="min-h-screen bg-slate-100 pb-20">
       <div className="bg-blue-700 text-white px-4 py-4">
         <h1 className="text-lg font-bold">Field Tasks</h1>
         <p className="text-xs text-blue-200">Tap a task for readiness checklist</p>
+
+        {/* Department Filter Bar */}
+        <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
+          {['ALL', 'TRD', 'ENGINEERING', 'S_AND_T'].map(dept => (
+            <button
+              key={dept}
+              onClick={() => setSelectedDept(dept)}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all shrink-0 ${
+                selectedDept === dept
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'bg-blue-800/60 text-blue-100 hover:bg-blue-800'
+              }`}
+            >
+              {dept === 'S_AND_T' ? 'S&T' : dept}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="px-4 py-4 space-y-3">
         {loading ? (
           <div className="text-center py-12 text-slate-500">Loading...</div>
-        ) : tasks.slice(0, 8).map(t => (
+        ) : filteredTasks.map(t => (
           <div key={t.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <button onClick={() => setSelectedTask(selectedTask?.id === t.id ? null : t)} className="w-full p-4 text-left flex items-center justify-between active:bg-slate-50">
               <div>

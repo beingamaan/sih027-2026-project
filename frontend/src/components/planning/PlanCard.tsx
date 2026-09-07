@@ -60,11 +60,12 @@ export const PlanCard: React.FC<PlanCardProps> = ({ plan, selected, onSelect }) 
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400">
-        <span className="flex items-center gap-1">
-          <Calendar size={12} /> {plan.horizon_start} to {plan.horizon_end}
+      <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
+        <span className="flex items-center gap-1 font-semibold text-slate-700">
+          <Calendar size={13} className="text-blue-600" />
+          7-Day Window: {new Date(plan.horizon_start).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} – {new Date(plan.horizon_end).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
         </span>
-        <span className="font-semibold text-slate-600 uppercase">{plan.status}</span>
+        <span className="font-semibold text-slate-600 uppercase">{plan.approval_status || 'PENDING'}</span>
       </div>
     </div>
   );

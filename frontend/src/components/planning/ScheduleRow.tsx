@@ -14,11 +14,12 @@ export const ScheduleRow: React.FC<ScheduleRowProps> = ({
   onSelectTask,
   selectedTaskId,
 }) => {
-  const getDeptColor = (dept: string) => {
+  const getDeptColor = (dept: string | undefined) => {
     switch (dept) {
       case 'ENGINEERING': return 'bg-amber-500 border-amber-600 text-white';
       case 'TRD': return 'bg-blue-600 border-blue-700 text-white';
-      case 'S&T': return 'bg-emerald-600 border-emerald-700 text-white';
+      case 'S&T':
+      case 'S_AND_T': return 'bg-emerald-600 border-emerald-700 text-white';
       default: return 'bg-slate-700 border-slate-800 text-white';
     }
   };

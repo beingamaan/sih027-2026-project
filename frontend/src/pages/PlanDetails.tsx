@@ -81,8 +81,8 @@ export const PlanDetails: React.FC = () => {
         <div>
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-bold font-mono text-slate-900">{plan.plan_code}</h2>
-            <Badge variant={plan.status === 'APPROVED' ? 'green' : plan.status === 'REJECTED' ? 'red' : 'amber'}>
-              {plan.status}
+            <Badge variant={plan.approval_status === 'APPROVED' ? 'green' : plan.approval_status === 'REJECTED' ? 'red' : 'amber'}>
+              {plan.approval_status}
             </Badge>
             <Badge variant="blue">{plan.plan_type}</Badge>
           </div>
@@ -97,7 +97,7 @@ export const PlanDetails: React.FC = () => {
             variant="success"
             size="sm"
             onClick={() => setModalType('approve')}
-            disabled={plan.status === 'APPROVED'}
+            disabled={plan.approval_status === 'APPROVED'}
             icon={<CheckCircle2 size={16} />}
           >
             Approve Plan
@@ -114,7 +114,7 @@ export const PlanDetails: React.FC = () => {
             variant="danger"
             size="sm"
             onClick={() => setModalType('reject')}
-            disabled={plan.status === 'REJECTED'}
+            disabled={plan.approval_status === 'REJECTED'}
             icon={<XCircle size={16} />}
           >
             Reject Plan

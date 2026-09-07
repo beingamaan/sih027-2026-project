@@ -11,8 +11,6 @@ import { ErrorMessage } from '../components/common/ErrorMessage';
 import { getSummary, getDashboardRisks, getDashboardTasks, getTrainImpact } from '../services/dashboardApi';
 import { getResourceUtilization } from '../services/analyticsApi';
 import { DashboardSummary, OperationalRisk, Task } from '../types';
-import { TaskForm } from "./TaskForm";
-import { BlockWindowForm } from "./BlockWindowForm";
 
 export const Dashboard: React.FC = () => {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -62,6 +60,38 @@ export const Dashboard: React.FC = () => {
   return (
     <PageContainer title="Dashboard" subtitle="Corridor Traffic & Maintenance Overview">
       {error && <ErrorMessage message={error} onRetry={loadData} />}
+
+      {/* Railway Operations Hero Banner */}
+      <div className="mb-8 p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-slate-800 text-white shadow-xl relative overflow-hidden">
+        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/20 via-transparent to-transparent"></div>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase tracking-widest">
+                Corridor Telemetry Active
+              </span>
+              <span className="text-xs text-slate-400">• NDLS - GZB - MB Line</span>
+            </div>
+            <h2 className="text-2xl font-extrabold tracking-tight text-white">
+              Railway Automatic Maintenance & Traffic Control
+            </h2>
+            <p className="text-xs text-slate-300 mt-1 max-w-xl">
+              Real-time CP-SAT solver horizon active. Monitoring maintenance tasks, corridor block windows, and train detention safety thresholds.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="px-4 py-2 rounded-xl bg-slate-800/80 border border-slate-700/80 backdrop-blur-md">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Track Blocks</p>
+              <p className="text-lg font-black text-cyan-400 font-mono">04 WINDOWS</p>
+            </div>
+            <div className="px-4 py-2 rounded-xl bg-slate-800/80 border border-slate-700/80 backdrop-blur-md">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Solver Horizon</p>
+              <p className="text-lg font-black text-emerald-400 font-mono">OPTIMAL</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* KPI Cards Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -125,9 +155,6 @@ export const Dashboard: React.FC = () => {
           variant="green"
         />
       </div>
-
-      <TaskForm onSuccess={loadData} />
-      <BlockWindowForm onSuccess={loadData} />
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">

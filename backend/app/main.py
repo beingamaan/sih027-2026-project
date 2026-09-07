@@ -2,10 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import tasks, plans, field, dashboard, analytics
 
+# Backend for SIH26027 Prototype. (NO ML)
 app = FastAPI(
-    title="Availability-First Block Planning DSS API",
-    description="Backend for SIH26027 Prototype. (NO ML)",
-    version="1.0.0"
+    title="AI-Powered Railway Block Planning Engine",
+    description="Backend API for generating, optimizing, and executing railway maintenance block plans.",
+    version="1.0.18"
 )
 
 app.add_middleware(

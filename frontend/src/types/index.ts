@@ -1,6 +1,6 @@
-export type LaneType = 'A_EMERGENCY' | 'B1_PLANNED' | 'B2_STATUTORY';
+export type LaneType = 'A_EMERGENCY' | 'B1_PLANNED' | 'B2_STATUTORY' | 'LANE_A' | 'LANE_B1' | 'LANE_B2';
 export type PriorityType = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-export type TaskStatus = 'PENDING' | 'ACKNOWLEDGED' | 'READY' | 'WORK_STARTED' | 'WORK_COMPLETED' | 'LINE_HANDED_BACK';
+export type TaskStatus = 'PENDING' | 'ACKNOWLEDGED' | 'READY' | 'WORK_STARTED' | 'WORK_COMPLETED' | 'LINE_HANDED_BACK' | 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CLOSED';
 export type ReadinessLevel = 'HIGH' | 'MEDIUM' | 'LOW';
 export type SolverStatus = 'OPTIMAL' | 'FEASIBLE' | 'HEURISTIC' | 'NO_SOLUTION';
 export type UserRole = 'FIELD_SUPERVISOR' | 'SECTION_CONTROLLER' | 'DIVISIONAL_OFFICER';
@@ -10,6 +10,7 @@ export interface Task {
   task_code: string;
   department: string;
   work_type: string;
+  description?: string;
   asset_id?: number | null;
   block_section_id: number;
   elementary_section_id?: number | null;
@@ -18,6 +19,7 @@ export interface Task {
   km_to: number;
   lane: LaneType;
   safety_class?: string | null;
+  priority?: PriorityType | string;
   priority_band?: PriorityType | null;
   priority_score?: number | null;
   requires_line_block: number;
@@ -27,20 +29,31 @@ export interface Task {
   estimated_duration_minutes: number;
   duration_buffer_minutes: number;
   actual_duration_minutes?: number | null;
+  p50_duration_minutes?: number | null;
+  p90_duration_minutes?: number | null;
+  overrun_probability?: number | null;
   required_machine_type?: string | null;
+  required_machine?: string | null;
   required_gang_size?: number | null;
+  required_gang?: number | null;
   material_ready: number;
   ptw_ready: number;
   power_ready: number;
+  power_permit_ready?: number;
   disconnection_ready: number;
   worksite_ready: number;
+  site_ready?: number;
+  machine_ready?: number;
+  gang_ready?: number;
   weather_suitable: number;
   statutory_due_date?: string | null;
+  deadline?: string | null;
   overdue_days: number;
   post_work_tsr_speed_kmph?: number | null;
   post_work_tsr_days?: number | null;
   post_work_tsr_cost?: number | null;
-  status: string;
+  status: TaskStatus | string;
+  task_type?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -49,33 +62,13 @@ export interface TaskClassification {
   lane: LaneType;
   optimizer_eligible: boolean;
   message: string;
+  reason?: string;
 }
 
 export interface TaskReadiness {
   status: ReadinessLevel;
+  level?: ReadinessLevel;
   reasons: string[];
-}
-
-export interface Plan {
-  id: number;
-  plan_code: string;
-  version: number;
-  plan_type: 'PLAN_A' | 'PLAN_B';
-  horizon_start: string;
-  horizon_end: string;
-  total_cost?: number | null;
-  train_impact_cost?: number | null;
-  tsr_cost?: number | null;
-  failure_risk_cost?: number | null;
-  late_completion_cost?: number | null;
-  instability_cost?: number | null;
-  solver_status: SolverStatus;
-  solver_time_seconds?: number | null;
-  approval_status: string;
-  approved_by?: number | null;
-  approved_at?: string | null;
-  override_reason?: string | null;
-  created_at: string;
 }
 
 export interface PlannedTask {
@@ -87,6 +80,7 @@ export interface PlannedTask {
   block_window_id: number;
   planned_start: string;
   planned_end: string;
+  planned_duration_minutes?: number;
   setup_minutes?: number;
   work_minutes?: number;
   clearance_minutes?: number;
@@ -94,6 +88,35 @@ export interface PlannedTask {
   deferred: number;
   defer_reason?: string | null;
   explanation?: string | null;
+  km_from?: number;
+  km_to?: number;
+  readiness_level?: string;
+}
+
+export interface Plan {
+  id: number;
+  plan_code: string;
+  version: number;
+  plan_type: 'PLAN_A' | 'PLAN_B';
+  horizon_start: string;
+  horizon_end: string;
+  total_cost?: number | null;
+  total_estimated_cost?: number | null;
+  train_impact_cost?: number | null;
+  estimated_train_impact_minutes?: number | null;
+  tsr_cost?: number | null;
+  estimated_tsr_cost?: number | null;
+  failure_risk_cost?: number | null;
+  late_completion_cost?: number | null;
+  instability_cost?: number | null;
+  solver_status: SolverStatus;
+  solver_time_seconds?: number | null;
+  approval_status: string;
+  approved_by?: number | null;
+  approved_at?: string | null;
+  override_reason?: string | null;
+  created_at: string;
+  tasks?: PlannedTask[] | any[];
 }
 
 export interface BlockWindow {
@@ -127,12 +150,19 @@ export interface OperationalRisk {
   risk_type: string;
   severity: string;
   task_id: number;
+  title?: string;
+  detail?: string;
 }
 
 export interface DashboardSummary {
   total_tasks: number;
   total_plans: number;
   status: string;
+  open_tasks?: number;
+  lane_a_count?: number;
+  lane_b1_count?: number;
+  lane_b2_count?: number;
+  generated_plans?: number;
 }
 
 export interface Notification {

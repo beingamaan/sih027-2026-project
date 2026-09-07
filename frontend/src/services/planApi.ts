@@ -19,13 +19,8 @@ export const getPlans = async () => {
 export const getPlanDetails = async (id: number | string) => {
   const res = await api.get<Plan>(`/api/plans/${id}`);
   
-  // Ensure tasks array exists for the UI
   if (!res.data.tasks) {
-    res.data.tasks = [
-      { id: 1, task_id: 1, task_code: 'TSK_ENG_2', department: 'ENGINEERING', lane: 'B1_PLANNED', block_window_id: 1, planned_start: '02:00', planned_end: '05:00', planned_duration_minutes: 180, readiness_level: 'HIGH', explanation: 'AI assigned', setup_minutes: 15, work_minutes: 120, clearance_minutes: 20, handback_minutes: 10, deferred: 0 },
-      { id: 2, task_id: 2, task_code: 'TSK_ENG_4', department: 'ENGINEERING', lane: 'B1_PLANNED', block_window_id: 1, planned_start: '02:00', planned_end: '05:00', planned_duration_minutes: 180, readiness_level: 'HIGH', explanation: 'AI assigned', setup_minutes: 15, work_minutes: 120, clearance_minutes: 20, handback_minutes: 10, deferred: 0 },
-      { id: 3, task_id: 3, task_code: 'TSK_TRD_1', department: 'TRD', lane: 'B2_STATUTORY', block_window_id: 1, planned_start: '02:00', planned_end: '05:00', planned_duration_minutes: 180, readiness_level: 'HIGH', explanation: 'AI assigned', setup_minutes: 15, work_minutes: 120, clearance_minutes: 20, handback_minutes: 10, deferred: 0 }
-    ];
+    res.data.tasks = [];
   }
   
   // Add mock costs for the UI cards

@@ -15,6 +15,7 @@ import { FieldTasks } from './pages/FieldTasks';
 import { FieldExecution } from './pages/FieldExecution';
 import { Notifications } from './pages/Notifications';
 import { Profile } from './pages/Profile';
+import { AddTaskPage } from './pages/AddTaskPage';
 
 export const App: React.FC = () => {
   return (
@@ -25,6 +26,7 @@ export const App: React.FC = () => {
         {/* Controller / Officer routes */}
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/tasks" element={<Tasks />} />
+        <Route path="/add-task" element={<AddTaskPage />} />
         <Route path="/tasks/:id" element={<TaskDetails />} />
         <Route path="/planning" element={<Planning />} />
         <Route path="/plans/:id" element={<PlanDetails />} />
