@@ -1,48 +1,160 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Dashboard } from './pages/Dashboard';
-import { Tasks } from './pages/Tasks';
-import { TaskDetails } from './pages/TaskDetails';
-import { Planning } from './pages/Planning';
-import { PlanDetails } from './pages/PlanDetails';
-import { WhatIf } from './pages/WhatIf';
-import { TrainGraph } from './pages/TrainGraph';
-import { BlockDetails } from './pages/BlockDetails';
-import { Analytics } from './pages/Analytics';
-import { Login } from './pages/Login';
-import { FieldHome } from './pages/FieldHome';
-import { FieldTasks } from './pages/FieldTasks';
+import { SidebarProvider, useSidebar } from './components/layout/Sidebar';
+import { AuthProvider, useAuth, RailwayRole } from './context/AuthContext';
+import { CommandCenter } from './pages/CommandCenter';
+import { DepartmentWorkspace } from './pages/DepartmentWorkspace';
+import { GovernanceAudit } from './pages/GovernanceAudit';
 import { FieldExecution } from './pages/FieldExecution';
-import { Notifications } from './pages/Notifications';
-import { Profile } from './pages/Profile';
-import { AddTaskPage } from './pages/AddTaskPage';
+import { FieldInspect } from './pages/FieldInspect';
+import { StationAwareness } from './pages/StationAwareness';
+import { Dashboard } from './pages/Dashboard';
+import { TasksPage } from './pages/TasksPage';
+import { Planning } from './pages/Planning';
+import { TrainGraph } from './pages/TrainGraph';
+import { Footer } from './components/layout/Footer';
+
+// Main Layout Wrapper ensuring Footer is rendered ONLY ONCE at bottom of page content
+const MainLayoutWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isCollapsed } = useSidebar();
+  return (
+    <div className="min-h-screen flex flex-col justify-between bg-[#F7F8F5]">
+      <div className="flex-1 flex flex-col">
+        {children}
+      </div>
+      <div className={`transition-all duration-300 ${isCollapsed ? 'ml-20' : 'ml-[260px]'}`}>
+        <Footer />
+      </div>
+    </div>
+  );
+};
+
+import { ProtectedRoute } from './routes/ProtectedRoute';
+
+// Dynamic Landing Redirect based on authenticated role profile
+const DynamicLandingRedirect: React.FC = () => {
+  const { currentProfile } = useAuth();
+  return <Navigate to={currentProfile.landingRoute} replace />;
+};
 
 export const App: React.FC = () => {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="/login" element={<Login />} />
-        {/* Controller / Officer routes */}
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/tasks" element={<Tasks />} />
-        <Route path="/add-task" element={<AddTaskPage />} />
-        <Route path="/tasks/:id" element={<TaskDetails />} />
-        <Route path="/planning" element={<Planning />} />
-        <Route path="/plans/:id" element={<PlanDetails />} />
-        <Route path="/train-graph" element={<TrainGraph />} />
-        <Route path="/blocks/:id" element={<BlockDetails />} />
-        <Route path="/what-if" element={<WhatIf />} />
-        <Route path="/analytics" element={<Analytics />} />
-        <Route path="/notifications" element={<Notifications />} />
-        <Route path="/profile" element={<Profile />} />
-        {/* Field Supervisor routes */}
-        <Route path="/field" element={<FieldHome />} />
-        <Route path="/field/tasks" element={<FieldTasks />} />
-        <Route path="/field/execute/:taskId" element={<FieldExecution />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <SidebarProvider>
+        <BrowserRouter>
+          <MainLayoutWrapper>
+            <Routes>
+              <Route path="/" element={<DynamicLandingRedirect />} />
+              
+              {/* SECTION_CONTROLLER & DIVISIONAL_OFFICER COMMAND WORKSPACE */}
+              <Route 
+                path="/command" 
+                element={
+                  <ProtectedRoute allowedRoles={['SECTION_CONTROLLER', 'DIVISIONAL_OFFICER']}>
+                    <CommandCenter />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/dashboard" 
+                element={
+                  <ProtectedRoute allowedRoles={['SECTION_CONTROLLER', 'DIVISIONAL_OFFICER']}>
+                    <Dashboard />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/train-graph" 
+                element={
+                  <ProtectedRoute allowedRoles={['SECTION_CONTROLLER']}>
+                    <TrainGraph />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/planning" 
+                element={
+                  <ProtectedRoute allowedRoles={['SECTION_CONTROLLER']}>
+                    <Planning />
+                  </ProtectedRoute>
+                } 
+              />
+
+              {/* DEPT_SUPERVISOR WORKSPACE */}
+              <Route 
+                path="/department" 
+                element={
+                  <ProtectedRoute allowedRoles={['DEPT_SUPERVISOR']}>
+                    <DepartmentWorkspace />
+                  </ProtectedRoute>
+                } 
+              />
+
+              {/* SHARED TASKS: SECTION_CONTROLLER & DEPT_SUPERVISOR */}
+              <Route 
+                path="/tasks" 
+                element={
+                  <ProtectedRoute allowedRoles={['SECTION_CONTROLLER', 'DEPT_SUPERVISOR']}>
+                    <TasksPage />
+                  </ProtectedRoute>
+                } 
+              />
+
+              {/* FIELD_EXEC_LEAD WORKSPACE */}
+              <Route 
+                path="/field" 
+                element={
+                  <ProtectedRoute allowedRoles={['FIELD_EXEC_LEAD']}>
+                    <FieldExecution />
+                  </ProtectedRoute>
+                } 
+              />
+
+              {/* FIELD_INSPECTOR WORKSPACE */}
+              <Route 
+                path="/field/inspect" 
+                element={
+                  <ProtectedRoute allowedRoles={['FIELD_INSPECTOR']}>
+                    <FieldInspect />
+                  </ProtectedRoute>
+                } 
+              />
+
+              {/* STATION_MASTER WORKSPACE */}
+              <Route 
+                path="/station" 
+                element={
+                  <ProtectedRoute allowedRoles={['STATION_MASTER']}>
+                    <StationAwareness />
+                  </ProtectedRoute>
+                } 
+              />
+
+              {/* DIVISIONAL_OFFICER WORKSPACE */}
+              <Route 
+                path="/governance" 
+                element={
+                  <ProtectedRoute allowedRoles={['DIVISIONAL_OFFICER']}>
+                    <GovernanceAudit />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/audit" 
+                element={
+                  <ProtectedRoute allowedRoles={['DIVISIONAL_OFFICER']}>
+                    <GovernanceAudit />
+                  </ProtectedRoute>
+                } 
+              />
+
+              {/* Fallback Catch-All */}
+              <Route path="*" element={<DynamicLandingRedirect />} />
+            </Routes>
+          </MainLayoutWrapper>
+        </BrowserRouter>
+      </SidebarProvider>
+    </AuthProvider>
   );
 };
 

@@ -1,225 +1,246 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { PageContainer } from '../components/layout/PageContainer';
-import { PlanCard } from '../components/planning/PlanCard';
-import { PlanComparison } from '../components/planning/PlanComparison';
-import { Timeline } from '../components/planning/Timeline';
-import { Button } from '../components/common/Button';
-import { Loading } from '../components/common/Loading';
-import { ErrorMessage } from '../components/common/ErrorMessage';
-import { generatePlans, getPlans, getPlanDetails, approvePlan } from '../services/planApi';
-import { Plan } from '../types';
-import { Cpu, ArrowRight, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Sidebar, useSidebar } from '../components/layout/Sidebar';
+import { 
+  Cpu, CheckCircle2, ShieldAlert, ArrowRight, 
+  Clock, ShieldCheck, Sparkles, AlertCircle, RefreshCw 
+} from 'lucide-react';
+import { generateDualPlans, getPlans, approvePlan, overridePlan } from '../services/railwayApi';
+import { Plan, DualPlanResponse } from '../types';
 
 export const Planning: React.FC = () => {
-  const navigate = useNavigate();
-  const [plans, setPlans] = useState<{ plan_a: Plan; plan_b?: Plan } | null>(null);
-  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
+  const { isCollapsed } = useSidebar();
+  const [plans, setPlans] = useState<DualPlanResponse | null>(null);
+  const [planList, setPlanList] = useState<Plan[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [generationStep, setGenerationStep] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
-  const [approving, setApproving] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
-  const loadExistingPlans = async () => {
+  const loadPlans = async () => {
     try {
       const list = await getPlans();
-      if (list.length > 0) {
-        const latest = list[list.length - 1];
-        const fullA = await getPlanDetails(latest.id);
-        let planData: { plan_a: Plan; plan_b?: Plan } = { plan_a: fullA };
-        // Only generate a synthetic Plan B if the latest plan is NOT approved
-        if (latest.approval_status !== 'APPROVED') {
-          const fullB = {
-            ...fullA,
-            id: latest.id + 100,
-            plan_code: fullA.plan_code.replace('A', 'B'),
-            plan_type: 'PLAN_B' as const,
-            total_cost: 450,
-            train_impact_cost: 350
-          };
-          planData.plan_b = fullB;
-        }
-        setPlans(planData);
-        setSelectedPlan(fullA);
+      setPlanList(list);
+      if (list.length > 0 && !selectedPlanId) {
+        setSelectedPlanId(list[0].id);
       }
     } catch (e) {
-      console.error(e);
-    }
-  };
-
-  useEffect(() => {
-    loadExistingPlans();
-  }, []);
-
-  const handleApprove = async () => {
-    if (!selectedPlan) return;
-    setApproving(true);
-    try {
-      const realId = selectedPlan.id > 100 ? selectedPlan.id - 100 : selectedPlan.id;
-      await approvePlan(realId);
-      await loadExistingPlans();
-    } catch (err: any) {
-      console.error('Approve failed:', err);
-    } finally {
-      setApproving(false);
+      console.error("Failed to load plans", e);
     }
   };
 
   const handleGenerate = async () => {
     setGenerating(true);
-    setError(null);
-    setGenerationStep('Analyzing tasks in corridor...');
-
-    const stepTimer1 = setTimeout(() => setGenerationStep('Checking prerequisite readiness levels...'), 700);
-    const stepTimer2 = setTimeout(() => setGenerationStep('Checking block windows & train paths...'), 1400);
-    const stepTimer3 = setTimeout(() => setGenerationStep('Solving CP-SAT constraints (OR-Tools)...'), 2100);
-
+    setActionMessage(null);
     try {
-      const res = await generatePlans(7);
-      clearTimeout(stepTimer1);
-      clearTimeout(stepTimer2);
-      clearTimeout(stepTimer3);
-      setGenerationStep('Generating Plan A and Plan B matrices...');
-      
-      const fullA = await getPlanDetails(res.planId);
-      const fullB = { 
-        ...fullA, 
-        id: res.planId + 100, 
-        plan_code: fullA.plan_code.replace('A', 'B'), 
-        plan_type: 'PLAN_B' as const, 
-        total_cost: 450, 
-        train_impact_cost: 350 
-      };
-      
-      setPlans({ plan_a: fullA, plan_b: fullB });
-      setSelectedPlan(fullA);
-      await loadExistingPlans();
-    } catch (err: any) {
-      console.error('Plan generation error:', err);
-      setError('Failed to generate plan with CP-SAT solver. Ensure backend is running.');
+      const res = await generateDualPlans();
+      setPlans(res);
+      setSelectedPlanId(res.plan_a_id);
+      await loadPlans();
+      setActionMessage("Dual Plans generated successfully. Evaluated P50 & P90 duration matrices.");
+    } catch (e) {
+      console.error("Plan generation error", e);
     } finally {
       setGenerating(false);
-      setGenerationStep('');
     }
   };
 
+  const handleApprove = async (id: number) => {
+    try {
+      const res = await approvePlan(id);
+      setActionMessage(res.message);
+      await loadPlans();
+    } catch (e) {
+      console.error("Approve failed", e);
+    }
+  };
+
+  const handleOverride = async (id: number) => {
+    try {
+      const res = await overridePlan(id, "SECTION_CONTROLLER_TRAFFIC_DEMAND");
+      setActionMessage(res.message);
+      await loadPlans();
+    } catch (e) {
+      console.error("Override failed", e);
+    }
+  };
+
+  useEffect(() => {
+    loadPlans();
+  }, []);
+
+  const activePlan = planList.find(p => p.id === selectedPlanId) || planList[0];
+
   return (
-    <PageContainer title="AI Block Planning & Optimization" subtitle="Google OR-Tools CP-SAT Corridor Schedule Generator">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">7-Day Corridor Planning Engine</h2>
-          <p className="text-xs text-slate-500">Formulates optimal maintenance windows while minimizing passenger train headway delays</p>
+    <div className="flex min-h-screen bg-[#F7F8F5]">
+      <Sidebar />
+      <main className={`flex-1 transition-all duration-300 ${isCollapsed ? 'ml-20' : 'ml-[260px]'} p-6 relative z-10`}>
+        
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl glass-panel-elevated mb-6 border border-white/90">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 uppercase tracking-wider glow-blue">
+                Explainable Rule & CP-SAT Engine
+              </span>
+              <span className="text-xs text-slate-500 font-semibold">• 58 km Horizon</span>
+            </div>
+            <h1 className="text-2xl font-black text-[#0B1220] tracking-tight">
+              Dual-Plan Automatic Generation & Sanction Portal
+            </h1>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              Formulates Plan A (Lowest weighted train-minute cost) and Plan B (Alternate robust window with P90 buffer).
+            </p>
+          </div>
+
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-black shadow-lg shadow-blue-600/25 flex items-center gap-2 transition-all active:scale-98"
+          >
+            <Cpu size={16} className={generating ? 'animate-spin' : ''} />
+            {generating ? 'Optimizing Corridor Matrix...' : 'Generate Dual Plans'}
+          </button>
         </div>
 
-        <Button
-          onClick={handleGenerate}
-          loading={generating}
-          variant="primary"
-          size="lg"
-          icon={<Cpu size={20} />}
-        >
-          Generate Optimal Plan
-        </Button>
-      </div>
+        {actionMessage && (
+          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-900 mb-6 flex items-center gap-2.5 shadow-sm glow-teal">
+            <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+            {actionMessage}
+          </div>
+        )}
 
-      {error && <ErrorMessage message={error} />}
+        {/* Dual Plan Cards Comparison */}
+        {planList.length >= 2 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {/* Plan A Card */}
+            <div className={`p-6 rounded-2xl border transition-all cursor-pointer ${
+              activePlan?.plan_type === 'PLAN_A' 
+                ? 'bg-blue-50/90 border-blue-400 ring-2 ring-blue-400 shadow-xl glow-blue' 
+                : 'glass-panel hover:border-slate-300'
+            }`} onClick={() => setSelectedPlanId(planList.find(p => p.plan_type === 'PLAN_A')?.id || planList[0].id)}>
+              <div className="flex justify-between items-start mb-3">
+                <div>
+                  <span className="px-2.5 py-0.5 rounded bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider">
+                    Plan A (Recommended)
+                  </span>
+                  <h3 className="text-lg font-black text-[#0B1220] mt-1.5">{planList.find(p => p.plan_type === 'PLAN_A')?.plan_code}</h3>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Detention Penalty</p>
+                  <p className="text-2xl font-black text-blue-700 metric-mono">
+                    {planList.find(p => p.plan_type === 'PLAN_A')?.total_cost ?? 1243} WTM
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-600 font-medium leading-relaxed mb-4">
+                Least-cost feasible option based on P50 baseline duration & minimum passenger traffic headway delay.
+              </p>
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-3 border-t border-slate-200/80 font-semibold">
+                <span>Status: <strong className="text-slate-900">{planList.find(p => p.plan_type === 'PLAN_A')?.approval_status}</strong></span>
+                <span>Horizon: 7 Days (Lookahead)</span>
+              </div>
+            </div>
 
-      {generating && (
-        <div className="bg-white p-8 rounded-xl border border-blue-200 shadow-sm text-center my-8">
-          <Cpu size={40} className="text-blue-600 animate-spin mx-auto mb-3" />
-          <h3 className="text-base font-bold text-slate-800">{generationStep}</h3>
-          <p className="text-xs text-slate-500 mt-1">Executing CP-SAT solver model with safety constraints</p>
-        </div>
-      )}
+            {/* Plan B Card */}
+            <div className={`p-6 rounded-2xl border transition-all cursor-pointer ${
+              activePlan?.plan_type === 'PLAN_B' 
+                ? 'bg-amber-50/90 border-amber-400 ring-2 ring-amber-400 shadow-xl glow-amber' 
+                : 'glass-panel hover:border-slate-300'
+            }`} onClick={() => setSelectedPlanId(planList.find(p => p.plan_type === 'PLAN_B')?.id || planList[1]?.id)}>
+              <div className="flex justify-between items-start mb-3">
+                <div>
+                  <span className="px-2.5 py-0.5 rounded bg-amber-600 text-white text-[10px] font-black uppercase tracking-wider">
+                    Plan B (Alternate Robust)
+                  </span>
+                  <h3 className="text-lg font-black text-[#0B1220] mt-1.5">{planList.find(p => p.plan_type === 'PLAN_B')?.plan_code}</h3>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Detention Penalty</p>
+                  <p className="text-2xl font-black text-amber-700 metric-mono">
+                    {planList.find(p => p.plan_type === 'PLAN_B')?.total_cost ?? 1554} WTM
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-600 font-medium leading-relaxed mb-4">
+                Robust alternate option with conservative P90 buffers (+25% allowance) to protect against unexpected machine transit delays.
+              </p>
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-3 border-t border-slate-200/80 font-semibold">
+                <span>Status: <strong className="text-slate-900">{planList.find(p => p.plan_type === 'PLAN_B')?.approval_status}</strong></span>
+                <span>Horizon: 7 Days (Lookahead)</span>
+              </div>
+            </div>
+          </div>
+        )}
 
-      {/* Plan Display */}
-      {plans && !generating && (
-        <div className="space-y-8 my-6 animate-fadeIn">
-          {plans.plan_b ? (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <PlanCard
-                  plan={plans.plan_a}
-                  selected={selectedPlan?.id === plans.plan_a.id}
-                  onSelect={() => setSelectedPlan(plans.plan_a)}
-                />
-                <PlanCard
-                  plan={plans.plan_b}
-                  selected={selectedPlan?.id === plans.plan_b?.id}
-                  onSelect={() => setSelectedPlan(plans.plan_b || null)}
-                />
+        {/* Active Plan Tasks Table & Actions */}
+        {activePlan && (
+          <div className="p-6 rounded-2xl glass-panel-elevated">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+              <div>
+                <h3 className="text-sm font-black text-[#0B1220]">
+                  Plan Block Window Assignments: {activePlan.plan_code} ({activePlan.plan_type})
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Total Penalty Score: {activePlan.total_cost} Weighted Train-Minutes · Regulation Delay: {activePlan.train_impact_cost}m
+                </p>
               </div>
 
-              <PlanComparison planA={plans.plan_a} planB={plans.plan_b} />
-
-              {/* Schedule Timeline */}
-              {selectedPlan && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-900">
-                        Schedule Timeline: {selectedPlan.plan_code}
-                      </h3>
-                      <p className="text-xs text-slate-500">
-                        Visual block window assignment across corridor sections
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="success"
-                        size="sm"
-                        loading={approving}
-                        disabled={selectedPlan.approval_status === 'APPROVED'}
-                        onClick={handleApprove}
-                        icon={<CheckCircle2 size={15} />}
-                      >
-                        {selectedPlan.approval_status === 'APPROVED' ? 'Plan Approved' : 'Approve Plan'}
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => navigate(`/plans/${selectedPlan.id}`)}
-                        icon={<ArrowRight size={14} />}
-                      >
-                        Inspect & Authorize Plan
-                      </Button>
-                    </div>
-                  </div>
-
-                  <Timeline tasks={selectedPlan.tasks || []} />
-                </div>
-              )}
-            </>
-          ) : (
-            // Only Plan A (approved) – simple view with a button
-            <div className="flex justify-center mt-4">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => navigate(`/plans/${plans.plan_a.id}`)}
-                icon={<ArrowRight size={14} />}
-              >
-                View Approved Plan Details
-              </Button>
+              <div className="flex items-center gap-2.5">
+                <button
+                  onClick={() => handleApprove(activePlan.id)}
+                  disabled={activePlan.approval_status === 'APPROVED'}
+                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md glow-teal active:scale-98"
+                >
+                  <CheckCircle2 size={15} />
+                  {activePlan.approval_status === 'APPROVED' ? 'Approved & Sanctioned' : 'Approve & Sanction Plan'}
+                </button>
+                <button
+                  onClick={() => handleOverride(activePlan.id)}
+                  className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md active:scale-98"
+                >
+                  <ShieldAlert size={15} />
+                  Override with Log
+                </button>
+              </div>
             </div>
-          )}
-        </div>
-      )}
 
-      {/* When no plans generated yet */}
-      {!plans && !generating && (
-        <div className="bg-white p-12 rounded-xl border border-slate-200 shadow-xs text-center my-6">
-          <Cpu size={48} className="mx-auto text-slate-400 mb-4" />
-          <h3 className="text-lg font-bold text-slate-800">No Active Plan Generation in View</h3>
-          <p className="text-sm text-slate-500 max-w-md mx-auto mt-1 mb-6">
-            Click &apos;Generate Optimal Plan&apos; to initiate the CP-SAT engine. It will evaluate all Lane B1 and B2 tasks, check resource availability, and output Plan A (optimal) alongside Plan B (alternative).
-          </p>
-          <Button onClick={handleGenerate} variant="primary" icon={<Cpu size={18} />}>
-            Run Scheduler Now
-          </Button>
-        </div>
-      )}
-    </PageContainer>
+            <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 text-slate-600 uppercase font-bold text-[10px] border-b border-slate-200">
+                  <tr>
+                    <th className="p-3.5">Task Code</th>
+                    <th className="p-3.5">Dept</th>
+                    <th className="p-3.5">Corridor Section</th>
+                    <th className="p-3.5">KM Span</th>
+                    <th className="p-3.5">Window</th>
+                    <th className="p-3.5">Duration</th>
+                    <th className="p-3.5">Readiness</th>
+                    <th className="p-3.5">Explanation</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200/80 bg-white">
+                  {activePlan.tasks?.map((t: any, idx: number) => (
+                    <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="p-3.5 font-black text-[#0B1220]">{t.task_code}</td>
+                      <td className="p-3.5 text-slate-600 font-bold">{t.department}</td>
+                      <td className="p-3.5 text-slate-800 font-medium">{t.section_name}</td>
+                      <td className="p-3.5 text-slate-700 metric-mono font-bold">KM {t.km_from}–{t.km_to}</td>
+                      <td className="p-3.5 text-blue-700 font-black metric-mono">{t.planned_start} – {t.planned_end}</td>
+                      <td className="p-3.5 text-slate-600 metric-mono">{t.work_minutes}m work (+{t.setup_minutes + t.clearance_minutes + t.handback_minutes}m aux)</td>
+                      <td className="p-3.5">
+                        <span className="px-2.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-black text-[10px] glow-teal">
+                          {t.readiness_score} pts
+                        </span>
+                      </td>
+                      <td className="p-3.5 text-slate-500 text-[11px] max-w-xs truncate font-medium">{t.explanation}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+      </main>
+    </div>
   );
 };

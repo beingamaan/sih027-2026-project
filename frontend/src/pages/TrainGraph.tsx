@@ -1,329 +1,329 @@
 import React, { useState, useEffect } from 'react';
-import { PageContainer } from '../components/layout/PageContainer';
-import { Loading } from '../components/common/Loading';
-import { api } from '../services/api';
-import { AlertTriangle, ZoomIn, Clock, Train } from 'lucide-react';
-
-const MAX_KM = 150;
-
-const STATIONS = [
-  { name: 'New Delhi (NDLS)', km: 0 },
-  { name: 'Ghaziabad (GZB)', km: 30 },
-  { name: 'Moradabad (MB)', km: 90 },
-  { name: 'Bareilly (BE)', km: MAX_KM },
-];
-
-// Drastically reduce mock trains to make the graph easier to read (avoid spaghetti effect)
-const MOCK_TRAINS = Array.from({ length: 6 }, (_, i) => {
-  const h = i * 4; // Only generate trains every 4 hours instead of every hour
-  return [
-    { id: `EXP-${h}01`, cls: 'EXPRESS', dir: 'UP', startKm: 0, endKm: MAX_KM, startH: h, endH: h + 3.2, color: '#3b82f6' },
-    { id: `FRT-${h}02`, cls: 'FREIGHT', dir: 'DOWN', startKm: MAX_KM, endKm: 0, startH: h + 1.5, endH: h + 5.0, color: '#64748b' },
-    { id: `PAS-${h}03`, cls: 'PASSENGER', dir: 'UP', startKm: 0, endKm: 90, startH: h + 2.0, endH: h + 4.5, color: '#10b981' },
-  ];
-}).flat();
-
-const MOCK_TSR = [
-  { kmStart: 15, kmEnd: 18, speed: 30, label: 'TSR 30 km/h' },
-  { kmStart: 85, kmEnd: 88, speed: 50, label: 'TSR 50 km/h' },
-];
+import { Sidebar, useSidebar } from '../components/layout/Sidebar';
+import { Train, RefreshCw, ZoomIn, Clock, Compass, Layers, Calendar, CheckCircle2 } from 'lucide-react';
+import { getTrains, getCorridorState, getPlans } from '../services/railwayApi';
+import { TrainPath, CorridorState, Plan } from '../types';
+import { CALIBRATED_CORRIDOR_TRAINS, parseTimeToHours } from '../components/charts/MareyChart';
 
 export const TrainGraph: React.FC = () => {
-  const [loading, setLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState(24);
+  const { isCollapsed } = useSidebar();
+  const [trains, setTrains] = useState<TrainPath[]>([]);
+  const [corridor, setCorridor] = useState<CorridorState | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [activePlanType, setActivePlanType] = useState<'PLAN_A' | 'PLAN_B'>('PLAN_A');
+  const [timeRange, setTimeRange] = useState<number>(6);
   const [hoveredTrain, setHoveredTrain] = useState<string | null>(null);
   const [hoveredBlock, setHoveredBlock] = useState<string | null>(null);
-  
-  // Layer Toggles to reduce clutter
-  const [showTrains, setShowTrains] = useState(true);
-  const [showBlocks, setShowBlocks] = useState(true);
-  const [showTSRs, setShowTSRs] = useState(false); // Hidden by default for simplicity
-  
-  const [blocks, setBlocks] = useState<any[]>([]);
-  const [currentTimeH, setCurrentTimeH] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [trnRes, corRes, plnRes] = await Promise.all([
+        getTrains(),
+        getCorridorState(),
+        getPlans()
+      ]);
+      setTrains(trnRes);
+      setCorridor(corRes);
+      setPlans(plnRes);
+    } catch (e) {
+      console.error("Failed to load train graph data", e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const plansRes = await api.get('/api/plans');
-        const plans = plansRes.data;
-        if (plans && plans.length > 0) {
-          const latestPlan = plans[plans.length - 1];
-          const planDetailRes = await api.get(`/api/plans/${latestPlan.id}`);
-          const tasks = planDetailRes.data.tasks || [];
-          
-          const parsedBlocks = tasks.map((t: any) => {
-            const parseTime = (tStr: string) => {
-              if (!tStr) return 0;
-              const parts = tStr.split(':');
-              if (parts.length === 2) {
-                return parseInt(parts[0]) + parseInt(parts[1]) / 60;
-              }
-              const dt = new Date(tStr);
-              if (!isNaN(dt.getTime())) return dt.getHours() + dt.getMinutes() / 60;
-              return 0;
-            };
-            
-            return {
-              id: t.task_code,
-              section: t.section_name,
-              kmStart: t.km_from || 0,
-              kmEnd: t.km_to || 10,
-              startH: parseTime(t.planned_start),
-              endH: parseTime(t.planned_end),
-              type: t.lane,
-              tasks: 1,
-              department: t.department
-            };
-          });
-          setBlocks(parsedBlocks);
-        }
-      } catch (e) {
-        console.error("Failed to load graph data", e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
     loadData();
-
-    const updateTime = () => {
-      const now = new Date();
-      setCurrentTimeH(now.getHours() + now.getMinutes() / 60);
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 60000);
-    return () => clearInterval(interval);
   }, []);
 
-  if (loading) {
-    return <PageContainer title="Train Graph" subtitle="Time-Distance Visualization"><Loading message="Loading train paths & blocks..." /></PageContainer>;
-  }
+  const displayTrains = (trains && trains.length > 0) ? trains : CALIBRATED_CORRIDOR_TRAINS;
 
-  const chartW = 900;
-  const chartH = 400;
-  const padL = 90, padR = 20, padT = 30, padB = 40;
+  const chartW = 980;
+  const chartH = 480;
+  const padL = 95;
+  const padR = 30;
+  const padT = 35;
+  const padB = 45;
   const plotW = chartW - padL - padR;
   const plotH = chartH - padT - padB;
 
-  const timeToX = (h: number) => padL + (Math.max(0, Math.min(h, timeRange)) / timeRange) * plotW;
-  const kmToY = (km: number) => padT + (Math.max(0, Math.min(km, MAX_KM)) / MAX_KM) * plotH;
+  const minKm = 100.0;
+  const maxKm = 158.0;
+  const kmSpan = maxKm - minKm;
 
-  const visibleTrains = MOCK_TRAINS.filter(t => t.startH < timeRange);
+  const timeToX = (hours: number) => padL + (Math.max(0, Math.min(hours, timeRange)) / timeRange) * plotW;
+  const kmToY = (km: number) => padT + ((Math.max(minKm, Math.min(km, maxKm)) - minKm) / kmSpan) * plotH;
+
+  // Scheduled Possession Windows on Section STB (KM 120) to STC (KM 140)
+  const blockY1 = kmToY(120.0);
+  const blockY2 = kmToY(140.0);
+  const blockH = blockY2 - blockY1;
+
+  // Plan A: 02:00 to 04:00 (120 min duration)
+  const planAX1 = timeToX(2.0);
+  const planAX2 = timeToX(4.0);
+  const planAW = planAX2 - planAX1;
+
+  // Plan B: 02:00 to 04:45 (165 min duration)
+  const planBX1 = timeToX(2.0);
+  const planBX2 = timeToX(4.75);
+  const planBW = planBX2 - planBX1;
+
+  // Conflict Point: BCN-91021 intersects block at ~02:52.5, KM 130.0
+  const conflictX = timeToX(2.875);
+  const conflictY = kmToY(130.0);
 
   return (
-    <PageContainer title="Train Graph" subtitle="Time-Distance Visualization">
-      
-      {/* Controls panel: greatly simplifies user experience */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          
-          <div className="flex items-center gap-4">
-            <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-              Time Range:
-              <select value={timeRange} onChange={e => setTimeRange(Number(e.target.value))} className="text-sm font-normal border border-slate-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500">
-                <option value={6}>6 hours (Zoomed In)</option>
-                <option value={12}>12 hours (Standard)</option>
-                <option value={24}>24 hours (Full Day)</option>
-              </select>
-            </label>
+    <div className="flex min-h-screen bg-[#F7F8F5]">
+      <Sidebar />
+      <main className={`flex-1 transition-all duration-300 ${isCollapsed ? 'ml-20' : 'ml-[260px]'} p-6 relative z-10 overflow-x-hidden`}>
+        
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl glass-panel-elevated mb-6 border border-white/90">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 uppercase tracking-wider glow-blue">
+                Time-Distance Marey Diagram
+              </span>
+              <span className="text-xs text-slate-500 font-semibold">• 58 km Corridor (KM 100.0 – 158.0)</span>
+            </div>
+            <h1 className="text-2xl font-black text-[#0B1220] tracking-tight">
+              Time-Distance Train Graph & Track Occupancy
+            </h1>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              Precision graphical chart mapping scheduled train trajectories alongside sanctioned joint block windows.
+            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-4 bg-slate-50 p-2 rounded-lg border border-slate-200">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-2">Display Layers:</span>
-            <label className="flex items-center gap-1.5 text-sm cursor-pointer hover:text-blue-600 transition-colors">
-              <input type="checkbox" checked={showBlocks} onChange={e => setShowBlocks(e.target.checked)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-              <div className="w-3 h-3 bg-blue-100 border border-blue-400 rounded-sm"></div>
-              Tasks
-            </label>
-            <label className="flex items-center gap-1.5 text-sm cursor-pointer hover:text-blue-600 transition-colors">
-              <input type="checkbox" checked={showTrains} onChange={e => setShowTrains(e.target.checked)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-              <div className="w-4 h-0.5 bg-blue-500"></div>
-              Trains
-            </label>
-            <label className="flex items-center gap-1.5 text-sm cursor-pointer hover:text-blue-600 transition-colors">
-              <input type="checkbox" checked={showTSRs} onChange={e => setShowTSRs(e.target.checked)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-              <div className="w-3 h-3 bg-red-100 border border-red-400 rounded-sm"></div>
-              Speed Restrictions
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 p-4 overflow-x-auto shadow-sm">
-        <svg width={chartW} height={chartH} className="w-full" viewBox={`0 0 ${chartW} ${chartH}`}>
-
-          {/* Background Grid */}
-          {STATIONS.map(s => (
-            <g key={s.name}>
-              <line x1={padL} y1={kmToY(s.km)} x2={chartW - padR} y2={kmToY(s.km)} stroke="#f1f5f9" strokeWidth="2" />
-              <text x={padL - 10} y={kmToY(s.km) + 4} textAnchor="end" className="text-[11px] font-semibold fill-slate-600">{s.name}</text>
-              <text x={padL - 10} y={kmToY(s.km) + 16} textAnchor="end" className="text-[9px] fill-slate-400">{s.km} km</text>
-            </g>
-          ))}
-          {Array.from({ length: timeRange + 1 }, (_, i) => (
-            <g key={`t-${i}`}>
-              <line x1={timeToX(i)} y1={padT} x2={timeToX(i)} y2={chartH - padB} stroke="#f8fafc" strokeWidth="1.5" />
-              {(i % 2 === 0 || timeRange <= 12) && (
-                <text x={timeToX(i)} y={chartH - padB + 18} textAnchor="middle" className="text-[10px] font-medium fill-slate-500">
-                  {String(i % 24).padStart(2, '0')}:00
-                </text>
-              )}
-            </g>
-          ))}
-
-          {/* TSR zones */}
-          {showTSRs && MOCK_TSR.map((tsr, i) => (
-            <rect key={`tsr-${i}`} x={padL} y={kmToY(tsr.kmStart)} width={plotW} height={kmToY(tsr.kmEnd) - kmToY(tsr.kmStart)} fill="#fef2f2" stroke="#fca5a5" strokeDasharray="4,2" rx={2} />
-          ))}
-
-          {/* Block windows (Real Tasks) */}
-          {showBlocks && blocks.map(b => {
-             // Only draw if task starts before our timeRange ends
-             if (b.startH >= timeRange) return null;
-             
-             const cappedKmStart = Math.min(b.kmStart, MAX_KM);
-             const cappedKmEnd = Math.min(b.kmEnd, MAX_KM) > cappedKmStart ? Math.min(b.kmEnd, MAX_KM) : cappedKmStart + 5;
-             const startX = timeToX(b.startH);
-             const endX = timeToX(Math.min(b.endH, timeRange)); // clamp right side
-             const w = Math.max(endX - startX, 4); // ensure min width
-             const h = Math.max(kmToY(cappedKmEnd) - kmToY(cappedKmStart), 18);
-             
-             return (
-              <g key={b.id} onMouseEnter={() => setHoveredBlock(b.id)} onMouseLeave={() => setHoveredBlock(null)} className="cursor-pointer transition-all duration-300">
-                {/* Modern Solid Block Zone */}
-                <rect 
-                  x={startX} y={kmToY(cappedKmStart)} width={w} height={h} 
-                  fill={hoveredBlock === b.id ? 'rgba(219, 234, 254, 0.95)' : 'rgba(239, 246, 255, 0.85)'} 
-                  stroke={hoveredBlock === b.id ? '#3b82f6' : '#93c5fd'} 
-                  strokeWidth={hoveredBlock === b.id ? 2 : 1.5} rx={6} 
-                  style={{ filter: hoveredBlock === b.id ? 'drop-shadow(0px 4px 6px rgba(37, 99, 235, 0.15))' : 'drop-shadow(0px 2px 4px rgba(0,0,0,0.05))' }}
-                />
-                
-                {/* Responsive Label - Always visible */}
-                {w > 45 ? (
-                  // Inside the block if wide enough
-                  <g transform={`translate(${startX + 6}, ${kmToY(cappedKmStart) + (h/2 - 5)})`}>
-                    <circle cx="3" cy="5" r="3" fill={hoveredBlock === b.id ? '#2563eb' : '#60a5fa'} />
-                    <text x="12" y="8" className="text-[10px] font-bold fill-blue-900 tracking-wide">{b.id}</text>
-                  </g>
-                ) : (
-                  // Above the block if too narrow
-                  <g transform={`translate(${startX}, ${kmToY(cappedKmStart) - 10})`}>
-                    <text x="0" y="6" className="text-[9px] font-bold fill-blue-800 tracking-wide" style={{ textShadow: '1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff' }}>{b.id}</text>
-                  </g>
-                )}
-              </g>
-            );
-          })}
-
-          {/* Train paths */}
-          {showTrains && visibleTrains.map((t, i) => {
-            if (t.startH >= timeRange) return null;
-            const startX = timeToX(t.startH);
-            const startY = kmToY(t.startKm);
-            const endX = timeToX(Math.min(t.endH, timeRange));
-            const endY = kmToY(t.endKm);
-            
-            const isHovered = hoveredTrain === t.id;
-            const trainColor = isHovered ? '#f59e0b' : t.color;
-            
-            const getStationAbbr = (km: number) => {
-              if (km <= 15) return 'NDLS';
-              if (km <= 60) return 'GZB';
-              if (km <= 120) return 'MB';
-              return 'BE';
-            };
-            const origin = getStationAbbr(t.startKm);
-            const dest = getStationAbbr(t.endKm);
-            
-            return (
-              <g 
-                key={`tr-${i}`} 
-                className="cursor-pointer transition-opacity duration-200"
-                opacity={hoveredTrain && !isHovered ? 0.1 : 0.8}
-                onMouseEnter={() => setHoveredTrain(t.id)} 
-                onMouseLeave={() => setHoveredTrain(null)}
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Plan A / Plan B Toggle */}
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+              <button
+                onClick={() => setActivePlanType('PLAN_A')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                  activePlanType === 'PLAN_A' 
+                    ? 'bg-blue-600 text-white shadow-md glow-blue' 
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
               >
-                {/* Main Train Line */}
-                <line x1={startX} y1={startY} x2={endX} y2={endY} stroke={trainColor} strokeWidth={isHovered ? 3 : 2} />
-                
-                {/* Train Logo Wrapper */}
-                <circle cx={startX} cy={startY} r="11" fill="white" stroke={trainColor} strokeWidth="1.5" className="shadow-sm" />
-                
-                {/* Train Icon */}
-                <g transform={`translate(${startX - 7}, ${startY - 7})`}>
-                  <Train size={14} color={trainColor} strokeWidth={2.5} />
-                </g>
+                Plan A Overlay (120m)
+              </button>
+              <button
+                onClick={() => setActivePlanType('PLAN_B')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                  activePlanType === 'PLAN_B' 
+                    ? 'bg-amber-600 text-white shadow-md glow-amber' 
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Plan B Overlay (165m)
+              </button>
+            </div>
 
-                {/* Direction Indicator (Tiny Arrow) */}
-                {t.dir === 'DOWN' ? (
-                  <path d={`M ${startX} ${startY+11} L ${startX-3} ${startY+16} L ${startX+3} ${startY+16} Z`} fill={trainColor} />
-                ) : (
-                  <path d={`M ${startX} ${startY-11} L ${startX-3} ${startY-16} L ${startX+3} ${startY-16} Z`} fill={trainColor} />
-                )}
+            <select
+              value={timeRange}
+              onChange={(e) => setTimeRange(Number(e.target.value))}
+              className="text-xs font-bold border border-slate-300 rounded-xl px-3.5 py-2.5 bg-white text-slate-800 shadow-xs"
+            >
+              <option value={6}>6 Hours Horizon (00:00 - 06:00)</option>
+              <option value={12}>12 Hours Horizon (00:00 - 12:00)</option>
+              <option value={24}>24 Hours Horizon (Full Day)</option>
+            </select>
 
-                {/* Permanent Route Label */}
-                <text x={startX + 16} y={startY + 3} className="text-[10px] font-bold fill-slate-700" style={{ textShadow: '1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff' }}>
-                  {origin} → {dest}
-                </text>
+            <button
+              onClick={loadData}
+              className="px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md active:scale-98"
+            >
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              Refresh
+            </button>
+          </div>
+        </div>
 
-                {/* ID Label on Hover */}
-                {isHovered && (
-                  <text x={startX + 16} y={startY - 9} className="text-[11px] font-black fill-amber-600" style={{ textShadow: '1px 1px 0 #fff, -1px -1px 0 #fff' }}>
-                    {t.id}
+        {/* Chart SVG Canvas */}
+        <div className="p-6 rounded-2xl glass-panel-elevated">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 overflow-x-auto shadow-sm relative">
+            <svg width={chartW} height={chartH} viewBox={`0 0 ${chartW} ${chartH}`} className="w-full">
+              {/* Station Grid Reference Lines for STA, STB, STC, STD */}
+              {corridor?.stations.map(st => {
+                const y = kmToY(st.chainage_km);
+                return (
+                  <g key={st.station_code}>
+                    <line x1={padL} y1={y} x2={chartW - padR} y2={y} stroke="#f1f5f9" strokeWidth="2" />
+                    <text x={padL - 12} y={y + 4} textAnchor="end" className="text-[11px] font-black fill-[#0B1220]">{st.name.split(' ')[0]}</text>
+                    <text x={padL - 12} y={y + 16} textAnchor="end" className="text-[9px] font-bold fill-slate-400 metric-mono">KM {st.chainage_km}</text>
+                  </g>
+                );
+              })}
+
+              {/* Time divisions */}
+              {Array.from({ length: timeRange + 1 }, (_, i) => {
+                const x = timeToX(i);
+                return (
+                  <g key={`t-${i}`}>
+                    <line x1={x} y1={padT} x2={x} y2={chartH - padB} stroke="#e2e8f0" strokeWidth="1.5" strokeDasharray="4,4" />
+                    <text x={x} y={chartH - padB + 18} textAnchor="middle" className="text-[10px] font-black fill-slate-600 metric-mono">
+                      {String(i % 24).padStart(2, '0')}:00
+                    </text>
+                  </g>
+                );
+              })}
+
+              {/* Scheduled Maintenance Possession Block on Section STB (KM 120) to STC (KM 140) */}
+              {activePlanType === 'PLAN_A' ? (
+                <g 
+                  onMouseEnter={() => setHoveredBlock('Plan A (02:00 - 04:00 • STB-STC 120m)')}
+                  onMouseLeave={() => setHoveredBlock(null)}
+                  className="cursor-pointer transition-opacity"
+                >
+                  <rect
+                    x={planAX1}
+                    y={blockY1}
+                    width={planAW}
+                    height={blockH}
+                    fill="rgba(37, 99, 235, 0.22)"
+                    stroke="#2563EB"
+                    strokeWidth="2"
+                    rx="6"
+                    style={{ filter: 'drop-shadow(0 4px 12px rgba(37, 99, 235, 0.12))' }}
+                  />
+                  <rect
+                    x={planAX1 + 8}
+                    y={blockY1 + 10}
+                    width={Math.min(planAW - 16, 380)}
+                    height="22"
+                    fill="rgba(37, 99, 235, 0.9)"
+                    rx="4"
+                  />
+                  <text x={planAX1 + 14} y={blockY1 + 25} className="text-[10px] font-black fill-white">
+                    Joint Maintenance Possession — Plan A (120m) [ENG + TRD + S&T]
                   </text>
-                )}
+                  <text x={planAX1 + 14} y={blockY1 + 46} className="text-[9px] font-extrabold fill-blue-900 metric-mono">
+                    SEC STB–STC (KM 120.0–140.0) • 02:00 – 04:00 Window
+                  </text>
+                </g>
+              ) : (
+                <g 
+                  onMouseEnter={() => setHoveredBlock('Plan B (02:00 - 04:45 • STB-STC 165m)')}
+                  onMouseLeave={() => setHoveredBlock(null)}
+                  className="cursor-pointer transition-opacity"
+                >
+                  <rect
+                    x={planBX1}
+                    y={blockY1}
+                    width={planBW}
+                    height={blockH}
+                    fill="rgba(217, 119, 6, 0.25)"
+                    stroke="#D97706"
+                    strokeWidth="2"
+                    strokeDasharray="4 2"
+                    rx="6"
+                    style={{ filter: 'drop-shadow(0 4px 12px rgba(217, 119, 6, 0.15))' }}
+                  />
+                  <rect
+                    x={planBX1 + 8}
+                    y={blockY1 + 10}
+                    width={Math.min(planBW - 16, 340)}
+                    height="22"
+                    fill="rgba(217, 119, 6, 0.9)"
+                    rx="4"
+                  />
+                  <text x={planBX1 + 14} y={blockY1 + 25} className="text-[10px] font-black fill-white">
+                    P90 Robust Buffer Possession — Plan B (165m)
+                  </text>
+                  <text x={planBX1 + 14} y={blockY1 + 46} className="text-[9px] font-extrabold fill-amber-950 metric-mono">
+                    SEC STB–STC (KM 120.0–140.0) • 02:00 – 04:45 Window (+45m Buffer)
+                  </text>
+                </g>
+              )}
+
+              {/* Diagonal Train Paths Trajectories with Identity Pills */}
+              {displayTrains.filter(t => parseTimeToHours(t.scheduled_start) <= timeRange).map((t, idx) => {
+                const startH = parseTimeToHours(t.scheduled_start);
+                const endH = parseTimeToHours(t.scheduled_end);
+                const x1 = timeToX(startH);
+                const x2 = timeToX(Math.min(endH, timeRange));
+                const y1 = kmToY(t.start_km);
+                const y2 = kmToY(t.end_km);
+
+                const isHovered = hoveredTrain === t.train_number;
+                const strokeColor = t.train_class === 'PREMIUM_EXPRESS' ? '#e11d48' : (t.train_class === 'SUPERFAST' ? '#2563eb' : '#475569');
+
+                let labelName = t.train_number.includes('Rajdhani') ? 'Rajdhani Exp' : 
+                  (t.train_number.includes('Shatabdi') ? 'Shatabdi Exp' : 
+                  (t.train_number.includes('Freight') || t.train_number.includes('Rake') ? 'Goods Freight' : t.train_number.split(' ')[0]));
+
+                return (
+                  <g 
+                    key={`tr-${idx}`} 
+                    onMouseEnter={() => setHoveredTrain(t.train_number)}
+                    onMouseLeave={() => setHoveredTrain(null)}
+                    className="cursor-pointer transition-opacity"
+                    opacity={hoveredTrain && !isHovered ? 0.25 : 1}
+                  >
+                    <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={isHovered ? '#f59e0b' : strokeColor} strokeWidth={isHovered ? 3.5 : 2.5} />
+                    <rect x={x1 + 4} y={y1 - 9} width="72" height="17" fill="#ffffff" stroke={strokeColor} strokeWidth="1.2" rx="4" className="shadow-xs" />
+                    <text x={x1 + 8} y={y1 + 3} className="text-[8px] font-black fill-slate-900 metric-mono">
+                      {labelName}
+                    </text>
+                  </g>
+                );
+              })}
+
+              {/* Pulsing Red Conflict Marker at Intersecting Path with TSR Regulation Chip */}
+              <g transform={`translate(${conflictX}, ${conflictY})`} className="cursor-pointer">
+                <circle cx="0" cy="0" r="14" fill="#e11d48" opacity="0.25" className="animate-ping" />
+                <circle cx="0" cy="0" r="8" fill="#e11d48" opacity="0.5" />
+                <circle cx="0" cy="0" r="4.5" fill="#ffffff" stroke="#e11d48" strokeWidth="2" />
+                
+                {/* TSR Regulation Imposed Chip */}
+                <rect x="12" y="-12" width="132" height="24" rx="5" fill="#0b1220" stroke="#f43f5e" strokeWidth="1.2" className="shadow-lg" />
+                <text x="20" y="3" className="text-[9px] font-black fill-rose-300">
+                  ⚠️ TSR Regulation Imposed
+                </text>
               </g>
-            );
-          })}
+            </svg>
 
-          {/* LIVE TRACKING LINE */}
-          {currentTimeH < timeRange && (
-            <g className="live-tracker">
-              <line x1={timeToX(currentTimeH)} y1={padT} x2={timeToX(currentTimeH)} y2={chartH - padB} stroke="#ef4444" strokeWidth="2.5" strokeDasharray="6,4" />
-              <rect x={timeToX(currentTimeH) - 25} y={8} width={50} height={18} fill="#ef4444" rx="4" className="shadow-sm" />
-              <text x={timeToX(currentTimeH)} y={20} fill="white" fontSize="10" fontWeight="bold" textAnchor="middle">
-                LIVE
-              </text>
-            </g>
-          )}
-        </svg>
-
-        {/* Hover Tooltips */}
-        <div className="h-10 mt-2 flex items-center justify-center">
-          {hoveredTrain && (
-            <div className="px-3 py-1.5 bg-slate-800 text-white rounded-lg border text-sm inline-flex items-center gap-2 shadow-md animate-fade-in">
-              <Train size={16} className="text-blue-400" />
-              <span className="font-bold">{hoveredTrain}</span>
-              <span className="text-slate-300">| {MOCK_TRAINS.find(t => t.id === hoveredTrain)?.cls} ({MOCK_TRAINS.find(t => t.id === hoveredTrain)?.dir})</span>
+            {/* Tooltip */}
+            <div className="h-8 mt-2 flex items-center justify-center">
+              {hoveredTrain && (
+                <div className="px-3 py-1 bg-slate-900 text-white rounded-lg text-xs font-bold inline-flex items-center gap-2 shadow-md">
+                  <Train size={14} className="text-cyan-400" />
+                  <span>{hoveredTrain}</span>
+                  <span className="text-slate-400">| Scheduled Path</span>
+                </div>
+              )}
+              {hoveredBlock && (
+                <div className="px-3 py-1 bg-blue-50 text-blue-900 border border-blue-200 rounded-lg text-xs font-bold inline-flex items-center gap-2 shadow-md">
+                  <Clock size={14} className="text-blue-600" />
+                  <span>{hoveredBlock}</span>
+                </div>
+              )}
             </div>
-          )}
-          {hoveredBlock && (
-            <div className="px-3 py-1.5 bg-blue-50 text-blue-900 border border-blue-200 rounded-lg text-sm inline-flex items-center gap-2 shadow-md animate-fade-in">
-              <Clock size={16} className="text-blue-600" />
-              <span className="font-bold">{hoveredBlock}</span>
-              <span className="text-blue-700">| {blocks.find(b => b.id === hoveredBlock)?.department} | {blocks.find(b => b.id === hoveredBlock)?.section}</span>
-            </div>
-          )}
-          {!hoveredTrain && !hoveredBlock && (
-            <div className="text-xs text-slate-400 flex items-center gap-1"><ZoomIn size={14} /> Hover over a train line or block window for details</div>
-          )}
-        </div>
-      </div>
+          </div>
 
-      <div className="mt-4 p-4 bg-blue-50/50 border border-blue-100 rounded-xl flex items-start gap-3">
-        <div className="p-2 bg-blue-100 text-blue-600 rounded-lg shrink-0">
-          <Clock size={20} />
+          <div className="mt-3 flex items-center justify-between text-xs text-slate-500 font-medium px-2 flex-wrap gap-2">
+            <span className="flex items-center gap-1.5"><span className="w-3.5 h-1 bg-rose-600 rounded"></span> Premium Express (Rajdhani)</span>
+            <span className="flex items-center gap-1.5"><span className="w-3.5 h-1 bg-blue-600 rounded"></span> Superfast (Shatabdi)</span>
+            <span className="flex items-center gap-1.5"><span className="w-3.5 h-1 bg-slate-600 rounded"></span> Goods Freight Service</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-blue-200 border border-blue-600 rounded-xs"></span> Plan A Possession (02:00–04:00)</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-amber-200 border border-amber-600 rounded-xs"></span> Plan B Possession (02:00–04:45)</span>
+          </div>
         </div>
-        <div>
-          <h4 className="text-sm font-bold text-blue-900 mb-1">How to read this chart</h4>
-          <p className="text-xs text-blue-800 leading-relaxed">
-            The <strong>Red Dashed Line</strong> represents the current actual time. Everything to the left is in the past; everything to the right is in the future. 
-            <strong> Blue Rectangles</strong> are scheduled maintenance tasks. <strong>Diagonal Lines</strong> are trains passing through the stations. Use the toggles above to hide layers and reduce clutter.
+
+        {/* Compliance Screen Footer */}
+        <footer className="mt-8 pt-5 pb-3 border-t border-slate-200 text-center text-xs text-slate-500 font-medium">
+          <p className="font-semibold text-slate-700">
+            Advisory-only decision support. Final block grant authorization remains with authorized Section Controllers.
           </p>
-        </div>
-      </div>
-    </PageContainer>
+          <p className="text-[10px] text-slate-400 mt-1">
+            Lane A/B = workflow lane · UP/DOWN = physical line · All delay detentions scored strictly in Weighted Train-Minutes (WTM)
+          </p>
+        </footer>
+
+      </main>
+    </div>
   );
 };

@@ -1,9 +1,10 @@
 # Classification Engine
 def classify_lane(task) -> dict:
-    # A_EMERGENCY bypasses scheduling
-    if task.lane == 'A_EMERGENCY':
+    lane_str = getattr(task.lane, 'value', str(task.lane))
+    # A_EMERGENCY / LANE_A bypasses scheduling
+    if lane_str in ('A_EMERGENCY', 'LANE_A'):
         return {
-            "lane": "A_EMERGENCY",
+            "lane": lane_str,
             "optimizer_eligible": False,
             "message": "Emergency task - handled directly by field execution."
         }
@@ -22,3 +23,7 @@ def classify_lane(task) -> dict:
         "optimizer_eligible": True,
         "message": "Task is eligible for optimal planner scheduling."
     }
+
+# Backward-compatibility alias
+classify_task = classify_lane
+

@@ -1,63 +1,208 @@
 @import "tailwindcss";
 
-body {
-  margin: 0;
-  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  background-color: #f8fafc;
-  color: #0f172a;
-  -webkit-font-smoothing: antialiased;
+@layer base {
+  :root {
+    --surface-canvas: #F7F8F5;
+    --card-surface: #FCFBF8;
+    --card-border: #D9E0E8;
+    --card-shadow: 0 4px 12px rgba(15, 42, 67, 0.05);
+    --railway-navy: #102A43;
+    --railway-blue: #1E5AA8;
+    --midnight-start: #071A2F;
+    --midnight-end: #102A43;
+    --railway-green: #16805C;
+    --railway-green-light: #EAF6F0;
+    --railway-amber: #D9901A;
+    --railway-amber-light: #FFF7E6;
+    --railway-crimson: #9E1B28;
+    --railway-crimson-bright: #B42332;
+    --railway-crimson-dark: #7A141E;
+    --signal-violet: #7456B8;
+  }
+
+  body {
+    background-color: #F7F8F5;
+    color: #102A43;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
 }
 
-/* --- High-Impact Modern UI Styling --- */
-
-/* Glass Cards with Subtle Border Glow */
-.bg-white {
-  background-color: rgba(255, 255, 255, 0.95) !important;
-  backdrop-filter: blur(12px);
-  border-color: rgba(226, 232, 240, 0.9) !important;
-  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+/* Typography Helpers */
+.font-serif-hero {
+  font-family: 'Source Serif 4', Georgia, Cambria, serif;
 }
 
-/* Card Hover Elevation */
-.bg-white:hover {
-  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 4px 10px -2px rgba(15, 23, 42, 0.04);
+.font-sans-inter {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-/* Modern Gradient Accent Buttons */
-button.bg-blue-600, .bg-blue-600 {
-  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%) !important;
-  box-shadow: 0 4px 14px 0 rgba(37, 99, 235, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+/* Primary Canvas & Component Card Tokens */
+.bg-canvas-ivory {
+  background-color: #F7F8F5;
 }
 
-button.bg-blue-600:hover, .bg-blue-600:hover {
-  box-shadow: 0 6px 20px 0 rgba(37, 99, 235, 0.45);
+.card-warm {
+  background-color: #FCFBF8;
+  border: 1px solid #D9E0E8;
+  box-shadow: 0 4px 12px rgba(15, 42, 67, 0.05);
+  border-radius: 1rem; /* 16px */
+}
+
+.card-warm-interactive {
+  background-color: #FCFBF8;
+  border: 1px solid #D9E0E8;
+  box-shadow: 0 4px 12px rgba(15, 42, 67, 0.05);
+  border-radius: 1rem;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-warm-interactive:hover {
+  border-color: #BCC8D6;
+  box-shadow: 0 8px 24px rgba(15, 42, 67, 0.08);
   transform: translateY(-1px);
 }
 
-/* Sidebar Active Link Glow */
-aside a.bg-blue-600 {
-  background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%) !important;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4) !important;
+/* Midnight Navy Diagnostics & Readiness Cards */
+.card-midnight {
+  background: linear-gradient(180deg, #071A2F 0%, #102A43 100%);
+  border: 1px solid #1C3D5A;
+  box-shadow: 0 8px 24px rgba(7, 26, 47, 0.25);
+  border-radius: 1rem;
 }
 
-/* Smooth Custom Scrollbar */
+/* Enterprise Government Table Helpers */
+.gov-table-header {
+  background-color: #F0F4F8;
+  color: #334E68;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #D9E0E8;
+}
+
+.gov-table-row {
+  background-color: #FCFBF8;
+  border-bottom: 1px solid #E6ECF2;
+  transition: background-color 0.15s ease;
+}
+
+.gov-table-row:nth-child(even) {
+  background-color: #F8FAFC;
+}
+
+.gov-table-row:hover {
+  background-color: #EEF4FA;
+}
+
+/* Lane Badges */
+.pill-lane-a {
+  background-color: #FFF0F1;
+  color: #B42332;
+  border: 1px solid #F8D7DA;
+  font-weight: 700;
+}
+
+.pill-lane-b {
+  background-color: #EAF6F0;
+  color: #16805C;
+  border: 1px solid #C6EADB;
+  font-weight: 700;
+}
+
+.pill-amber {
+  background-color: #FFF7E6;
+  color: #D9901A;
+  border: 1px solid #FFE7BA;
+  font-weight: 700;
+}
+
+.pill-violet {
+  background-color: #F3E8FF;
+  color: #7456B8;
+  border: 1px solid #E9D5FF;
+  font-weight: 700;
+}
+
+/* Status Dots */
+.status-dot-critical {
+  color: #B42332;
+}
+
+.status-dot-warning {
+  color: #D9901A;
+}
+
+.status-dot-normal {
+  color: #16805C;
+}
+
+/* Monospace Tabular Numerics */
+.metric-mono {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+/* Nova card backward-compatibility */
+.nova-card {
+  background-color: #FCFBF8;
+  border: 1px solid #D9E0E8;
+  box-shadow: 0 4px 12px rgba(15, 42, 67, 0.05);
+  border-radius: 1rem;
+  transition: all 0.2s ease;
+}
+
+.nova-card-hover:hover {
+  border-color: #BCC8D6;
+  box-shadow: 0 8px 20px rgba(15, 42, 67, 0.08);
+}
+
+.glass-panel,
+.glass-panel-elevated {
+  background-color: #FCFBF8;
+  border: 1px solid #D9E0E8;
+  box-shadow: 0 4px 12px rgba(15, 42, 67, 0.05);
+  border-radius: 1rem;
+}
+
+/* Sidebar Responsive Layout Helpers */
+body.sidebar-collapsed main.ml-64,
+body.sidebar-collapsed div.ml-64,
+body.sidebar-collapsed main.ml-\[260px\],
+body.sidebar-collapsed div.ml-\[260px\] {
+  margin-left: 5rem !important;
+}
+
+main, div.min-w-0 {
+  transition: margin-left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Custom Sleek Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: #F0F4F8;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #CBD2D9;
   border-radius: 9999px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #9AA5B1;
+}
+
+/* Pulsing radar keyframes */
+@keyframes radarPulse {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 0.3; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.radar-glow {
+  animation: radarPulse 2.4s ease-in-out infinite;
 }

@@ -1,20 +1,20 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
-
 export const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: 'http://localhost:8000',
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 20000,
+  timeout: 15000,
 });
 
-export interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-  error?: {
-    code?: string;
-    message?: string;
-  };
-}
+// Request interceptor injecting JWT Bearer token into all requests
+api.interceptors.request.use((config) => {
+  const token = sessionStorage.getItem('sih_access_token') || localStorage.getItem('sih_access_token');
+  if (token && config.headers) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});

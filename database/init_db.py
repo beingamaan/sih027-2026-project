@@ -1,23 +1,29 @@
 import sqlite3
+import os
+import shutil
 
-db_path = 'railway.db'
+db_dir = os.path.dirname(os.path.abspath(__file__))
+schema_path = os.path.join(db_dir, 'schema.sql')
+seed_path = os.path.join(db_dir, 'seed.sql')
+db_path = os.path.join(db_dir, 'railway.db')
+
+if os.path.exists(db_path):
+    os.remove(db_path)
+
 conn = sqlite3.connect(db_path)
-cursor = conn.cursor()
+conn.execute("PRAGMA foreign_keys = ON")
 
-# Get all tables
-cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-tables = cursor.fetchall()
+with open(schema_path, 'r', encoding='utf-8') as f:
+    conn.executescript(f.read())
 
-# Drop all tables
-for table_name in tables:
-    if table_name[0] != 'sqlite_sequence':
-        cursor.execute(f"DROP TABLE IF EXISTS {table_name[0]}")
+with open(seed_path, 'r', encoding='utf-8') as f:
+    conn.executescript(f.read())
+
 conn.commit()
-
-with open('schema.sql', 'r') as f:
-    conn.executescript(f.read())
-with open('seed.sql', 'r') as f:
-    conn.executescript(f.read())
-
 conn.close()
-print("Database initialized successfully.")
+
+# Also ensure backend directory has a synced copy if running from different working directory
+backend_db_path = os.path.join(db_dir, '..', 'backend', 'railway.db')
+shutil.copy2(db_path, backend_db_path)
+
+print(f"Database initialized successfully at {db_path} and synced to {backend_db_path}")

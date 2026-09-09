@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { Sidebar } from './Sidebar';
+import { Sidebar, useSidebar } from './Sidebar';
 import { Header } from './Header';
 import { Info } from 'lucide-react';
 
@@ -10,17 +10,19 @@ interface PageContainerProps {
 }
 
 export const PageContainer: React.FC<PageContainerProps> = ({ children, title, subtitle }) => {
+  const { isCollapsed } = useSidebar();
+  
   return (
-    <div className="min-h-screen bg-slate-50/80 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:24px_24px] flex">
+    <div className="min-h-screen bg-[#F7F8F5] flex">
       <Sidebar />
-      <div className="flex-1 ml-64 flex flex-col min-w-0">
+      <div className={`flex-1 ${isCollapsed ? 'ml-20' : 'ml-[260px]'} transition-all duration-300 ease-in-out flex flex-col min-w-0`}>
         <Header title={title} subtitle={subtitle} />
         <main className="flex-1 p-8 overflow-y-auto">
           {children}
         </main>
         
         {/* Safety & Prototype Disclaimer footer */}
-        <footer className="px-8 py-3.5 bg-white/90 backdrop-blur-md border-t border-slate-200/80 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-2xs">
+        <footer className="px-8 py-3.5 bg-white/80 backdrop-blur-md border-t border-slate-200/80 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-2xs">
           <div className="flex items-center gap-2 text-slate-600 font-medium">
             <Info size={14} className="text-blue-600 shrink-0" />
             <span>
