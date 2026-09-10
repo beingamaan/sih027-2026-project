@@ -467,17 +467,20 @@ class BlockAlterationAdviceOut(BaseModel):
 
 class AuditLogOut(BaseModel):
     id: int
+    log_id: Optional[int] = None
     actor_id: Union[str, int]
-    actor_role: Optional[str] = "CONTROLLER"
+    actor_role: Optional[str] = "SECTION_CONTROLLER"
     division_id: Optional[str] = "DLI"
     action: str
+    action_event: Optional[str] = None
     entity_type: Optional[str] = "BLOCK_PLAN"
     entity_id: Optional[Union[str, int]] = "1"
     before_json: Optional[str] = None
     after_json: Optional[str] = None
-    reason_code: Optional[str] = None
+    reason_code: Optional[str] = "STATUTORY_STANDARD"
     reason_text: Optional[str] = None
     timestamp: Optional[datetime] = None
+    sha256_hash: Optional[str] = None
     # Legacy field mappings
     role: Optional[str] = None
     division: Optional[str] = None

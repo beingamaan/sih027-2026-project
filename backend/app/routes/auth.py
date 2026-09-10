@@ -94,6 +94,64 @@ def login(data: LoginCredentialsRequest, request: Request, db: Session = Depends
         db.commit()
         db.refresh(user)
 
+    if not user and service_id_clean.upper() in ("IR-CTRL-0104",):
+        user = User(
+            service_id="IR-CTRL-0104",
+            employee_id="IR-CTRL-0104",
+            password_hash="$2b$12$e/demoPasswordHashSectionController00000000000000000000",
+            name="R. K. Sharma",
+            designation="Chief Section Controller",
+            role="SECTION_CONTROLLER",
+            department="OPS",
+            division_id="DLI",
+            division="DLI",
+            section_ids=[1, 2, 3],
+            is_active=True,
+            active=1,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    if not user and service_id_clean.upper() in ("IR-DRM-0012",):
+        user = User(
+            service_id="IR-DRM-0012",
+            employee_id="IR-DRM-0012",
+            password_hash="$2b$12$e/demoPasswordHashDivisionalOfficer000000000000000000",
+            name="Dr. S. Mukherjee",
+            designation="Sr. DOM · Review & Sanction",
+            role="DIVISIONAL_OFFICER",
+            department="OPS",
+            division_id="DLI",
+            division="DLI",
+            section_ids=[1, 2, 3],
+            is_active=True,
+            active=1,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    if not user and service_id_clean.upper() in ("IR-FLD-8845",):
+        user = User(
+            service_id="IR-FLD-8845",
+            employee_id="IR-FLD-8845",
+            password_hash="$2b$12$e/demoPasswordHashFieldExecLead000000000000000000000000",
+            name="V. K. Meena",
+            designation="Junior Engineer / Field Execution Lead",
+            role="FIELD_EXEC_LEAD",
+            department="ENG",
+            division_id="DLI",
+            division="DLI",
+            section_ids=[1],
+            team_id=101,
+            is_active=True,
+            active=1,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
     client_ip = request.client.host if request.client else "unknown"
     endpoint_path = str(request.url.path)
 
