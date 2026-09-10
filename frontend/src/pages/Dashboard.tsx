@@ -48,7 +48,7 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-[#F7F8F5]">
       <Sidebar />
-      <div className={`flex-1 ${isCollapsed ? 'ml-20' : 'ml-[260px]'} transition-all duration-300 ease-in-out flex flex-col min-w-0`}>
+      <div className="flex-1 min-w-0 transition-all duration-300 ease-in-out flex flex-col">
         <Header />
 
         <main className="p-6 relative z-10 space-y-6 flex-1">

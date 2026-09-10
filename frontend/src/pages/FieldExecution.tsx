@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sidebar, useSidebar } from '../components/layout/Sidebar';
 import { Header } from '../components/layout/Header';
+import { HeroBanner } from '../components/layout/HeroBanner';
 import { 
   CheckCircle2, 
   Circle, 
@@ -13,16 +14,26 @@ import {
   Users, 
   Lock, 
   RefreshCw,
-  Info
+  Info,
+  WifiOff,
+  UploadCloud,
+  Check,
+  X,
+  ShieldAlert
 } from 'lucide-react';
-import { getFieldTasks, submitFieldEvent, getPartnerStatus, getPlans } from '../services/railwayApi';
+import { 
+  getFieldTasks, 
+  getPlans, 
+  submitBlockFieldEvent 
+} from '../services/railwayApi';
 import { Task, LOSS_CODES } from '../types';
+import { CorridorTrackTopology } from '../components/corridor/CorridorTrackTopology';
 
 export interface CoBlockTask {
   id: number;
   task_code: string;
   department: string;
-  dept_short: 'ENG' | 'TRD' | 'S&T';
+  dept_short: 'ENG' | 'TRD' | 'SNT';
   task_title: string;
   status: 'COMPLETE' | 'IN_PROGRESS';
   lead_in_charge: string;
@@ -30,12 +41,23 @@ export interface CoBlockTask {
   is_complete: boolean;
 }
 
+interface QueuedEvent {
+  id: string;
+  block_id: number;
+  task_id: number;
+  step_event: string;
+  plan_version: number;
+  loss_code?: string;
+  remarks?: string;
+  timestamp: string;
+}
+
 const LIFECYCLE_STEPS = [
-  { key: 'ACK', label: '1. Acknowledge Sanctioned Plan', color: 'bg-blue-600 hover:bg-blue-700' },
-  { key: 'READY', label: '2. Confirm Site Readiness & Machine Arrival', color: 'bg-indigo-600 hover:bg-indigo-700' },
-  { key: 'START', label: '3. Start Maintenance Work Window', color: 'bg-amber-600 hover:bg-amber-700' },
-  { key: 'COMPLETE', label: '4. Complete Work & Clear Track', color: 'bg-emerald-600 hover:bg-emerald-700' },
-  { key: 'HANDBACK', label: '5. Hand Back Line', color: 'bg-slate-900 hover:bg-slate-800' },
+  { key: 'ACK', label: '1. ACKNOWLEDGE', fullLabel: '1. Acknowledge Sanctioned Plan', color: 'bg-blue-600 hover:bg-blue-700' },
+  { key: 'READY', label: '2. READY AT SITE', fullLabel: '2. Confirm Site Readiness & Machine Arrival', color: 'bg-indigo-600 hover:bg-indigo-700' },
+  { key: 'START', label: '3. START WORK', fullLabel: '3. Start Maintenance Work Window', color: 'bg-amber-600 hover:bg-amber-700' },
+  { key: 'COMPLETE', label: '4. WORK COMPLETE', fullLabel: '4. Complete Work & Clear Track', color: 'bg-emerald-600 hover:bg-emerald-700' },
+  { key: 'HANDBACK', label: '5. HAND BACK', fullLabel: '5. Hand Back Line Possession', color: 'bg-slate-900 hover:bg-slate-800' },
 ];
 
 export const FieldExecution: React.FC = () => {
@@ -45,54 +67,82 @@ export const FieldExecution: React.FC = () => {
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [timestamps, setTimestamps] = useState<Record<string, string>>({});
   const [showLossModal, setShowLossModal] = useState(false);
-  const [showHandbackLockoutModal, setShowHandbackLockoutModal] = useState(false);
   const [selectedLossCode, setSelectedLossCode] = useState<string>('');
   const [lossNotes, setLossNotes] = useState('');
+  const [showSafetyInterlockModal, setShowSafetyInterlockModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [safetyDisclaimer, setSafetyDisclaimer] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  // Version Control & Re-Acknowledgement Cycle
+  // Version Control & Re-Acknowledgement State
   const [activePlanId, setActivePlanId] = useState<number>(1);
+  const [activePlanCode, setActivePlanCode] = useState<string>('BLK-2026-DLI-04');
   const [activePlanVersion, setActivePlanVersion] = useState<number>(2);
   const [userAckVersion, setUserAckVersion] = useState<number>(1); // Simulating an un-re-acknowledged version initially
+
+  // Offline Event Queue State
+  const [offlineQueue, setOfflineQueue] = useState<QueuedEvent[]>(() => {
+    try {
+      const saved = localStorage.getItem('sih_field_offline_queue');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // 3 Bundled Co-Block Tasks for BLK-2026-DLI-04
   const [coBlockTasks, setCoBlockTasks] = useState<CoBlockTask[]>([
     {
       id: 1,
-      task_code: 'TSK_ENG_02',
-      department: 'ENG (P.Way)',
+      task_code: 'TSK_ENG_04',
+      department: 'Engineering (P.Way)',
       dept_short: 'ENG',
       task_title: 'ENG Tamping: Track Tamping & Alignment Renewal',
-      status: 'IN_PROGRESS',
+      status: 'COMPLETE',
       lead_in_charge: 'V. K. Meena, SSE (P.Way)',
-      location_km: 'KM 104.2 – 124.8',
-      is_complete: false
+      location_km: 'KM 119.2 – 121.0',
+      is_complete: true
     },
     {
       id: 2,
-      task_code: 'TSK_TRD_01',
-      department: 'TRD (OHE)',
+      task_code: 'TSK_TRD_03',
+      department: 'Traction (TRD / OHE)',
       dept_short: 'TRD',
-      task_title: 'TRD OHE: Cantilever Inspection & Power Isolation',
-      status: 'COMPLETE',
-      lead_in_charge: 'S. P. Yadav, SSE (TRD)',
-      location_km: 'KM 104.2 – 124.8',
-      is_complete: true
+      task_title: 'TRD OHE: Cantilever Inspection & Power Isolation (OHE Ladder gang active)',
+      status: 'IN_PROGRESS',
+      lead_in_charge: 'P. Kulkarni, SSE (TRD)',
+      location_km: 'KM 119.5 – 120.8',
+      is_complete: false
     },
     {
       id: 3,
-      task_code: 'TSK_SNT_01',
-      department: 'S&T (Signalling)',
-      dept_short: 'S&T',
-      task_title: 'S&T Cable: Point Machine Cable Testing & Disconnection',
+      task_code: 'TSK_SNT_04',
+      department: 'Signalling (S&T)',
+      dept_short: 'SNT',
+      task_title: 'S&T Cable: Point Machine 102A Testing & Signal Recalibration',
       status: 'COMPLETE',
-      lead_in_charge: 'A. R. Rao, JE (S&T)',
-      location_km: 'KM 104.2 – 124.8',
+      lead_in_charge: 'N. Srinivasan, SSE (S&T)',
+      location_km: 'KM 119.2 – 119.2',
       is_complete: true
     }
   ]);
+
+  // Online / Offline Listeners
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Sync offline queue to localStorage
+  useEffect(() => {
+    localStorage.setItem('sih_field_offline_queue', JSON.stringify(offlineQueue));
+  }, [offlineQueue]);
 
   const loadTasksAndPlan = async () => {
     try {
@@ -104,12 +154,14 @@ export const FieldExecution: React.FC = () => {
       if (plans.length > 0) {
         const latestPlan = plans[0];
         setActivePlanId(latestPlan.id);
+        setActivePlanCode((latestPlan as any).plan_code || 'BLK-2026-DLI-04');
         const ver = latestPlan.plan_version || 2;
         setActivePlanVersion(ver);
       }
 
       const assignedTasks = fieldTasks.filter(t => 
         (t.km_from >= 104 && t.km_to <= 125) || 
+        t.task_code === 'TSK_ENG_04' ||
         t.task_code === 'TSK_ENG_02'
       );
       const displayList = assignedTasks.length > 0 ? assignedTasks : fieldTasks.slice(0, 1);
@@ -131,17 +183,51 @@ export const FieldExecution: React.FC = () => {
 
   // Check if all partner tasks are complete for handback
   const allPartnersComplete = coBlockTasks.every(p => p.is_complete);
+  const incompletePartner = coBlockTasks.find(p => !p.is_complete);
 
+  // Manual Offline Sync Handler
+  const handleSyncOfflineEvents = async () => {
+    if (offlineQueue.length === 0) return;
+    setSubmitting(true);
+    setStatusMsg(null);
+    let syncedCount = 0;
+    const remaining: QueuedEvent[] = [];
+
+    for (const item of offlineQueue) {
+      try {
+        await submitBlockFieldEvent(item.block_id, {
+          task_id: item.task_id,
+          step_event: item.step_event,
+          plan_version: item.plan_version,
+          loss_code: item.loss_code,
+          remarks: item.remarks
+        });
+        syncedCount++;
+      } catch (err) {
+        remaining.push(item);
+      }
+    }
+
+    setOfflineQueue(remaining);
+    setSubmitting(false);
+    if (syncedCount > 0) {
+      setStatusMsg({
+        type: 'success',
+        text: `✓ Successfully synced ${syncedCount} queued field events to the railway audit ledger.`
+      });
+    }
+  };
+
+  // Re-acknowledge updated plan version
   const handleReAcknowledge = async () => {
     setSubmitting(true);
     setStatusMsg(null);
     try {
       setUserAckVersion(activePlanVersion);
       if (selectedTask) {
-        await submitFieldEvent({
-          block_id: activePlanId,
+        await submitBlockFieldEvent(activePlanId, {
           task_id: selectedTask.id,
-          event_type: 'ACK',
+          step_event: 'ACK',
           plan_version: activePlanVersion,
           remarks: `Field Lead re-acknowledged updated Plan V${activePlanVersion}`
         });
@@ -164,6 +250,16 @@ export const FieldExecution: React.FC = () => {
     }
   };
 
+  const handleSimulatePartnerComplete = () => {
+    setCoBlockTasks(prev => 
+      prev.map(p => ({ ...p, is_complete: true, status: 'COMPLETE' }))
+    );
+    setStatusMsg({
+      type: 'success',
+      text: 'Simulated: All bundled co-block tasks (ENG, TRD & SNT) marked COMPLETE. Handback gate unlocked.'
+    });
+  };
+
   const handleExecuteStep = async () => {
     if (!selectedTask || currentStepIdx >= LIFECYCLE_STEPS.length) return;
     const step = LIFECYCLE_STEPS[currentStepIdx];
@@ -179,70 +275,97 @@ export const FieldExecution: React.FC = () => {
 
     // Pre-flight check 2: Joint Handback locked if co-block partners are not complete
     if (step.key === 'HANDBACK' && !allPartnersComplete) {
-      setShowHandbackLockoutModal(true);
+      setShowSafetyInterlockModal(true);
+      const partnerName = incompletePartner ? incompletePartner.dept_short : 'co-block';
       setStatusMsg({
         type: 'error',
-        text: "Cannot hand back line. Co-block partners (e.g. TRD / S&T) are still actively working in this window. All bundled works must be marked COMPLETE first."
+        text: `Joint Handback Locked: Partner department tasks (${partnerName}) are still in progress. All bundled departments must finish work before handback.`
       });
       return;
     }
 
     setSubmitting(true);
     setStatusMsg(null);
-
     const timeStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    try {
-      const res = await submitFieldEvent({
+    // Offline mode: queue locally
+    if (!navigator.onLine) {
+      const queuedItem: QueuedEvent = {
+        id: `ev_${Date.now()}`,
         block_id: activePlanId,
         task_id: selectedTask.id,
-        event_type: step.key,
+        step_event: step.key,
         plan_version: userAckVersion,
-        remarks: `Field Lead recorded ${step.key}`
+        remarks: `Offline field event: ${step.key}`,
+        timestamp: timeStr
+      };
+      setOfflineQueue(prev => [...prev, queuedItem]);
+      setTimestamps(prev => ({ ...prev, [step.key]: `${timeStr} (Offline Queued)` }));
+      setCurrentStepIdx(prev => prev + 1);
+      setSubmitting(false);
+      setStatusMsg({
+        type: 'success',
+        text: `Network offline: Event ${step.key} queued locally. Will sync when connectivity returns.`
+      });
+      if (step.key === 'COMPLETE') setShowLossModal(true);
+      return;
+    }
+
+    try {
+      const res = await submitBlockFieldEvent(activePlanId, {
+        task_id: selectedTask.id,
+        step_event: step.key,
+        plan_version: userAckVersion,
+        remarks: `Field Lead executed ${step.key}`
       });
 
       setTimestamps(prev => ({ ...prev, [step.key]: timeStr }));
       setCurrentStepIdx(prev => prev + 1);
       setStatusMsg({
         type: 'success',
-        text: res.message || `Field event ${step.key} recorded to operational ledger.`
+        text: `Field event ${step.key} formally committed to railway audit ledger.`
       });
-
-      if (res.safety_disclaimer) {
-        setSafetyDisclaimer(res.safety_disclaimer);
-      }
 
       if (step.key === 'COMPLETE') {
         setShowLossModal(true);
       }
     } catch (e: any) {
       console.error("Event record error", e);
-      setStatusMsg({
-        type: 'error',
-        text: e?.response?.data?.detail || "Failed to record event to backend."
-      });
+      // Fallback queueing on network connection failure
+      if (!e?.response) {
+        const queuedItem: QueuedEvent = {
+          id: `ev_${Date.now()}`,
+          block_id: activePlanId,
+          task_id: selectedTask.id,
+          step_event: step.key,
+          plan_version: userAckVersion,
+          remarks: `Offline fallback: ${step.key}`,
+          timestamp: timeStr
+        };
+        setOfflineQueue(prev => [...prev, queuedItem]);
+        setTimestamps(prev => ({ ...prev, [step.key]: `${timeStr} (Queued)` }));
+        setCurrentStepIdx(prev => prev + 1);
+        setStatusMsg({
+          type: 'success',
+          text: `Connection lost: Event ${step.key} safely queued locally.`
+        });
+      } else {
+        setStatusMsg({
+          type: 'error',
+          text: e?.response?.data?.detail || "Failed to record event to backend."
+        });
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleSimulatePartnerComplete = () => {
-    setCoBlockTasks(prev => 
-      prev.map(p => ({ ...p, is_complete: true, status: 'COMPLETE' }))
-    );
-    setStatusMsg({
-      type: 'success',
-      text: 'Simulated: All bundled co-block tasks (ENG, TRD & S&T) marked COMPLETE. Handback gate unlocked.'
-    });
-  };
-
   const handleLossSubmit = async () => {
     if (selectedLossCode && selectedTask) {
       try {
-        await submitFieldEvent({
-          block_id: activePlanId,
+        await submitBlockFieldEvent(activePlanId, {
           task_id: selectedTask.id,
-          event_type: 'COMPLETE',
+          step_event: 'COMPLETE',
           plan_version: userAckVersion,
           loss_code: selectedLossCode,
           remarks: lossNotes || `Delay reason logged: ${selectedLossCode}`
@@ -267,41 +390,79 @@ export const FieldExecution: React.FC = () => {
   const isFinished = currentStepIdx >= LIFECYCLE_STEPS.length;
   const currentStep = LIFECYCLE_STEPS[currentStepIdx];
 
-  // Determine if action button is disabled
+  // Determine button label and disabled status
   const isButtonDisabled = () => {
     if (submitting) return true;
     if (currentStep?.key === 'START' && isStalePlan) return true;
-    // Allow clicking '5. Hand Back Line' so the Joint Handback Lockout Safety Modal is triggered
     return false;
+  };
+
+  const getActionButtonText = () => {
+    if (submitting) return 'Recording Timestamp...';
+    if (currentStep?.key === 'HANDBACK' && !allPartnersComplete) {
+      return '5. Hand Back Line (Safety Interlock Active)';
+    }
+    return currentStep?.fullLabel || 'Next Step';
   };
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F7F8F5]">
-      <div className="flex flex-1">
+      <div className="flex flex-1 min-h-screen">
         <Sidebar />
-        <div className={`flex-1 transition-all duration-300 flex flex-col ${isCollapsed ? 'ml-20' : 'ml-[260px]'}`}>
+        <div className="flex-1 min-w-0 transition-all duration-300 flex flex-col">
           <Header 
             title="Field Possession Lifecycle & Joint Handback" 
             subtitle="Real-Time Timestamps, Re-Ack Cycle & Integrated Multi-Department Barrier" 
           />
 
           <main className="flex-1 p-6 space-y-6 max-w-7xl w-full mx-auto">
+            {/* REUSABLE HERO BANNER */}
+            <HeroBanner 
+              title="Field Execution & Handback Terminal" 
+              subtitle="Offline Ground Progress & Joint Clearance Gate" 
+            />
+
+            {/* Offline Event Queue Banner */}
+            {offlineQueue.length > 0 && (
+              <div className="p-4 rounded-2xl bg-amber-500 text-slate-950 shadow-md flex items-center justify-between gap-3 animate-fadeIn">
+                <div className="flex items-center gap-2.5">
+                  <WifiOff size={20} className="text-slate-950 shrink-0" />
+                  <div>
+                    <span className="font-black text-xs uppercase tracking-wider block">
+                      OFFLINE — {offlineQueue.length} events queued
+                    </span>
+                    <span className="text-xs font-semibold">
+                      Events cached securely on device. Will automatically sync to control server when online.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={handleSyncOfflineEvents}
+                  disabled={submitting}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-950 text-white hover:bg-slate-800 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer shrink-0"
+                >
+                  <UploadCloud size={13} className={submitting ? 'animate-spin' : ''} />
+                  Sync Now
+                </button>
+              </div>
+            )}
+
             {/* Top Card */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl card-warm">
               <div>
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#EAF6F0] text-[#16805C] border border-[#16805C]/20 uppercase tracking-wider flex items-center gap-1">
                     <Smartphone size={12} className="text-[#16805C]" />
-                    Mobile Field Supervisor Loop
+                    Mobile Field Execution Lead (JE / SSE)
                   </span>
-                  <span className="text-xs text-slate-500 font-semibold">• 56px Touch Targets</span>
+                  <span className="text-xs text-slate-500 font-semibold">• 56px Touch Stepper</span>
                   <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-[#D9901A] flex items-center gap-1">
                     <MapPin size={11} className="text-[#D9901A]" />
-                    Block: BLK-2026-DLI-04 (KM 104.2 – 124.8)
+                    Block: {activePlanCode} (KM 119.2 – 122.5)
                   </span>
                 </div>
                 <h1 className="text-2xl font-serif font-black text-slate-900 tracking-tight">
-                  Field Maintenance Block Possession & Joint Handback
+                  Field Maintenance Block Possession &amp; Joint Handback
                 </h1>
                 <p className="text-xs text-slate-500 font-medium mt-0.5">
                   Records operational timestamps, enforces plan version freshness, and locks track handback until all bundled co-block partners report complete.
@@ -315,6 +476,9 @@ export const FieldExecution: React.FC = () => {
               </div>
             </div>
 
+            {/* GROUND POSSESSION LIMITS & CHAINAGE CLEARANCE TOPOLOGY */}
+            <CorridorTrackTopology variant="field" />
+
             {/* CRITICAL WARNING BANNER: STALE PLAN VERSION RE-ACK REQUIREMENT */}
             {isStalePlan && (
               <div className="p-4 rounded-2xl bg-[#B42332] text-white shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-200">
@@ -327,7 +491,7 @@ export const FieldExecution: React.FC = () => {
                       STALE PLAN DETECTED · VERSION INVALIDATION
                     </span>
                     <p className="text-xs font-black">
-                      PLAN UPDATED TO V{activePlanVersion} — YOU ARE VIEWING V{userAckVersion}. REFRESH & RE-ACKNOWLEDGE.
+                      PLAN UPDATED TO V{activePlanVersion} — YOU ARE VIEWING V{userAckVersion}. REFRESH &amp; RE-ACKNOWLEDGE.
                     </p>
                   </div>
                 </div>
@@ -344,8 +508,8 @@ export const FieldExecution: React.FC = () => {
             )}
 
             {/* INTEGRATED MULTI-DEPARTMENT CO-BLOCK STATUS (BLK-2026-DLI-04) */}
-            <div className="p-6 rounded-2xl card-warm">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div className="p-6 rounded-2xl card-warm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#1E5AA8] flex items-center justify-center border border-blue-200">
                     <Users size={16} />
@@ -355,7 +519,7 @@ export const FieldExecution: React.FC = () => {
                       Integrated Multi-Department Co-Block Status
                     </h3>
                     <p className="text-xs text-slate-500 font-medium">
-                      Active Possession Window: <span className="font-bold text-slate-800">BLK-2026-DLI-04</span> (3 Bundled Tasks)
+                      Active Possession Window: <span className="font-bold text-slate-800">{activePlanCode}</span> (3 Bundled Tasks)
                     </p>
                   </div>
                 </div>
@@ -382,23 +546,23 @@ export const FieldExecution: React.FC = () => {
               </div>
 
               {/* 3-Column Responsive Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {coBlockTasks.map((task) => (
                   <div
                     key={task.id}
                     className={`p-4 rounded-xl border transition-all ${
                       task.status === 'COMPLETE'
-                        ? 'bg-emerald-50/80 border-emerald-200/90 shadow-xs'
-                        : 'bg-amber-50/80 border-amber-200/90 shadow-xs'
+                        ? 'bg-emerald-50/80 border-emerald-200 shadow-xs'
+                        : 'bg-amber-50/80 border-amber-200 shadow-xs'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2 mb-2.5">
                       <span className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                        task.dept_short === 'ENG' ? 'bg-blue-100 text-blue-900 border border-blue-200' :
-                        task.dept_short === 'TRD' ? 'bg-amber-100 text-amber-900 border border-amber-200' :
-                        'bg-purple-100 text-purple-900 border border-purple-200'
+                        task.dept_short === 'ENG' ? 'bg-[#D9A05B]/20 text-[#7D4D15]' :
+                        task.dept_short === 'TRD' ? 'bg-[#8B7CF6]/20 text-[#5442A8]' :
+                        'bg-[#2DD4BF]/20 text-[#0E685C]'
                       }`}>
-                        {task.department}
+                        {task.dept_short}
                       </span>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
                         task.status === 'COMPLETE' 
@@ -409,14 +573,13 @@ export const FieldExecution: React.FC = () => {
                       </span>
                     </div>
 
-                    <h4 className="text-sm font-bold text-slate-900 tracking-tight leading-snug min-h-[40px]">
+                    <h4 className="text-xs font-bold text-slate-900 tracking-tight leading-snug min-h-[36px]">
                       {task.task_title}
                     </h4>
 
-                    <div className="flex items-center justify-between text-xs text-slate-600 mt-3 pt-2.5 border-t border-slate-200/70">
+                    <div className="flex items-center justify-between text-xs text-slate-600 mt-2 pt-2 border-t border-slate-200/70">
                       <span className="font-mono text-[11px] font-bold text-slate-500">{task.task_code}</span>
-                      <span className="font-semibold text-slate-800 flex items-center gap-1 truncate max-w-[170px]" title={task.lead_in_charge}>
-                        <Users size={12} className="text-slate-400 shrink-0" />
+                      <span className="font-semibold text-slate-800 truncate max-w-[150px]" title={task.lead_in_charge}>
                         {task.lead_in_charge}
                       </span>
                     </div>
@@ -432,17 +595,6 @@ export const FieldExecution: React.FC = () => {
               }`}>
                 {statusMsg.type === 'success' ? <CheckCircle2 size={18} className="text-emerald-600 shrink-0" /> : <AlertTriangle size={18} className="text-rose-600 shrink-0" />}
                 <span>{statusMsg.text}</span>
-              </div>
-            )}
-
-            {/* Statutory Safety Disclaimer */}
-            {safetyDisclaimer && (
-              <div className="p-4 rounded-2xl bg-blue-50 border border-blue-300 text-xs text-blue-900 leading-relaxed font-semibold flex items-start gap-2.5">
-                <Info size={18} className="text-blue-600 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold uppercase tracking-wider block mb-0.5">Statutory Railway Line Restoration Notice:</span>
-                  {safetyDisclaimer}
-                </div>
               </div>
             )}
 
@@ -485,10 +637,10 @@ export const FieldExecution: React.FC = () => {
               <div className="lg:col-span-2 p-6 rounded-2xl card-warm flex flex-col justify-between">
                 {selectedTask ? (
                   <div>
-                    <div className="p-5 rounded-2xl card-midnight text-white mb-6 shadow-xl">
+                    <div className="p-5 rounded-2xl bg-slate-900 text-white mb-6 shadow-xl">
                       <div className="flex justify-between items-start">
                         <div>
-                          <span className="text-[10px] px-2.5 py-0.5 rounded bg-[#1E5AA8] text-white font-black uppercase tracking-wider">
+                          <span className="text-[10px] px-2.5 py-0.5 rounded bg-blue-600 text-white font-black uppercase tracking-wider">
                             {selectedTask.lane}
                           </span>
                           <h2 className="text-lg font-black mt-2">{selectedTask.task_code}: {selectedTask.work_type}</h2>
@@ -503,8 +655,32 @@ export const FieldExecution: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Stepper Timeline */}
-                    <div className="space-y-4 mb-8">
+                    {/* Touch-Optimized 5-Step Stepper Header */}
+                    <div className="grid grid-cols-5 gap-2 mb-6">
+                      {LIFECYCLE_STEPS.map((step, idx) => {
+                        const done = idx < currentStepIdx;
+                        const active = idx === currentStepIdx;
+
+                        return (
+                          <div 
+                            key={step.key}
+                            className={`p-2 rounded-xl text-center border transition-all ${
+                              done ? 'bg-emerald-50 border-emerald-300 text-emerald-900' :
+                              active ? 'bg-blue-50 border-blue-400 text-blue-900 font-black shadow-xs ring-1 ring-blue-400' :
+                              'bg-slate-50 border-slate-200 text-slate-400'
+                            }`}
+                          >
+                            <span className="text-[10px] font-black block truncate">{step.label}</span>
+                            <div className="flex items-center justify-center mt-1">
+                              {done ? <CheckCircle2 size={14} className="text-emerald-600" /> : <Circle size={14} className={active ? 'text-blue-600 fill-blue-100' : 'text-slate-300'} />}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Stepper Timeline Rows */}
+                    <div className="space-y-3 mb-8">
                       {LIFECYCLE_STEPS.map((step, idx) => {
                         const done = idx < currentStepIdx;
                         const active = idx === currentStepIdx;
@@ -512,15 +688,8 @@ export const FieldExecution: React.FC = () => {
                         const isStartStep = step.key === 'START';
 
                         return (
-                          <div key={step.key} className="flex items-center gap-3.5">
-                            <div className="flex flex-col items-center">
-                              {done ? (
-                                <CheckCircle2 size={26} className="text-emerald-500" />
-                              ) : (
-                                <Circle size={26} className={active ? 'text-blue-600 fill-blue-50' : 'text-slate-300'} />
-                              )}
-                            </div>
-                            <div className={`flex-1 flex items-center justify-between p-4 rounded-xl border transition-all ${
+                          <div key={step.key} className="flex items-center gap-3">
+                            <div className={`flex-1 flex items-center justify-between p-3.5 rounded-xl border transition-all ${
                               done 
                                 ? 'bg-emerald-50/80 border-emerald-200' 
                                 : active 
@@ -529,7 +698,7 @@ export const FieldExecution: React.FC = () => {
                             }`}>
                               <div>
                                 <p className={`text-xs font-black ${done ? 'text-emerald-900' : (active ? 'text-blue-900' : 'text-slate-400')}`}>
-                                  {step.label}
+                                  {step.fullLabel}
                                 </p>
                                 {timestamps[step.key] && (
                                   <p className="text-[10px] text-slate-500 flex items-center gap-1.5 mt-0.5 metric-mono">
@@ -544,13 +713,13 @@ export const FieldExecution: React.FC = () => {
                                 {active && isHandbackStep && !allPartnersComplete && (
                                   <p className="text-[10px] text-amber-700 font-bold mt-1 flex items-center gap-1">
                                     <Lock size={10} />
-                                    Locked: Waiting for TRD/S&T co-block completion.
+                                    Locked: Waiting for {incompletePartner?.dept_short || 'partner'} completion.
                                   </p>
                                 )}
                               </div>
 
                               {done && (
-                                <span className="text-[10px] font-black text-emerald-800 bg-emerald-200/80 px-2.5 py-0.5 rounded">
+                                <span className="text-[10px] font-black text-emerald-800 bg-emerald-200 px-2 py-0.5 rounded">
                                   CONFIRMED
                                 </span>
                               )}
@@ -560,33 +729,24 @@ export const FieldExecution: React.FC = () => {
                       })}
                     </div>
 
-                    {/* Action Button */}
+                    {/* Action Button: Touch-Optimized 56px Target */}
                     {!isFinished && !showLossModal && (
                       <div className="space-y-2">
                         <button
                           type="button"
                           onClick={handleExecuteStep}
                           disabled={isButtonDisabled()}
-                          className={`w-full min-h-[56px] text-white rounded-2xl text-sm font-black shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                          className={`w-full min-h-[56px] text-white rounded-2xl text-xs sm:text-sm font-black shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
                             isButtonDisabled()
-                              ? 'bg-slate-400 cursor-not-allowed text-slate-200'
-                              : (currentStep?.key === 'HANDBACK' && !allPartnersComplete
-                                  ? 'bg-slate-900 hover:bg-slate-800 border-2 border-amber-500/60 active:scale-98 shadow-amber-900/20'
-                                  : `${currentStep?.color} active:scale-98`)
+                              ? 'bg-slate-300 cursor-not-allowed text-slate-500 border border-slate-300'
+                              : `${currentStep?.color} active:scale-98`
                           }`}
                         >
                           {currentStep?.key === 'HANDBACK' && !allPartnersComplete && (
-                            <Lock size={16} className="text-amber-400 shrink-0" />
+                            <Lock size={16} className="text-slate-500 shrink-0" />
                           )}
-                          {submitting ? 'Recording Timestamp...' : currentStep?.label}
+                          {getActionButtonText()}
                         </button>
-
-                        {currentStep?.key === 'HANDBACK' && !allPartnersComplete && (
-                          <p className="text-[11px] text-amber-700 font-bold text-center flex items-center justify-center gap-1">
-                            <Lock size={12} />
-                            Joint Handback Locked: Click to view lockout barrier &amp; co-block partner status.
-                          </p>
-                        )}
                       </div>
                     )}
 
@@ -606,22 +766,22 @@ export const FieldExecution: React.FC = () => {
 
                 {/* Delay Loss Reason Modal */}
                 {showLossModal && (
-                  <div className="mt-4 p-5 rounded-2xl bg-white border border-amber-300 shadow-xl">
-                    <h4 className="text-xs font-black text-slate-900 mb-1.5 flex items-center gap-2">
+                  <div className="mt-4 p-5 rounded-2xl bg-white border border-amber-300 shadow-xl space-y-3">
+                    <h4 className="text-xs font-black text-slate-900 flex items-center gap-2">
                       <AlertTriangle size={16} className="text-amber-600" />
-                      Was there any operational delay during this block possession?
+                      Operational Delay Accounting (Loss Code Required)
                     </h4>
-                    <p className="text-[11px] text-slate-500 mb-3.5 font-medium">
-                      Select standard Indian Railways delay loss reason code or skip if executed on schedule.
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Select standard Indian Railways delay loss code or skip if completed on schedule.
                     </p>
                     
-                    <div className="space-y-2 mb-3.5 max-h-52 overflow-y-auto">
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
                       {LOSS_CODES.map((lc) => (
                         <button
                           key={lc.value}
                           type="button"
                           onClick={() => setSelectedLossCode(lc.value)}
-                          className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-semibold border transition-all ${
+                          className={`w-full text-left px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all ${
                             selectedLossCode === lc.value
                               ? 'bg-blue-50 border-blue-500 text-blue-900 font-bold shadow-xs'
                               : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
@@ -633,10 +793,10 @@ export const FieldExecution: React.FC = () => {
                     </div>
 
                     <textarea
-                      placeholder="Additional supervisor field notes (optional)"
+                      placeholder="Additional field supervisor notes..."
                       value={lossNotes}
                       onChange={(e) => setLossNotes(e.target.value)}
-                      className="w-full text-xs p-2.5 rounded-xl border border-slate-300 mb-3.5 focus:ring-2 focus:ring-blue-500"
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500"
                       rows={2}
                     />
 
@@ -653,124 +813,125 @@ export const FieldExecution: React.FC = () => {
                 )}
               </div>
             </div>
+
+            {/* JOINT HANDBACK SAFETY INTERLOCK MODAL (G&SR COMPLIANCE) */}
+            {showSafetyInterlockModal && (
+              <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
+                <div className="bg-white rounded-2xl max-w-lg w-full border-2 border-rose-600 shadow-2xl p-6 relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowSafetyInterlockModal(false)}
+                    className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1 rounded-lg"
+                  >
+                    <X size={20} />
+                  </button>
+
+                  <div className="flex items-start gap-3.5 mb-4">
+                    <div className="p-3 bg-rose-100 text-rose-700 rounded-xl shrink-0">
+                      <ShieldAlert size={26} />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-rose-700 block">
+                        G&amp;SR MANDATORY STATUTORY INTERLOCK
+                      </span>
+                      <h3 className="text-lg font-black text-slate-900 leading-snug">
+                        Joint Handback Safety Interlock (G&amp;SR Compliance)
+                      </h3>
+                      <p className="text-xs font-bold text-rose-900 mt-1">
+                        Track cannot be certified fit for traffic restoration.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2.5 my-4">
+                    <p className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                      Partner Status Checklist:
+                    </p>
+
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                      <div className="flex items-center gap-2.5">
+                        <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">Engineering (P.Way)</p>
+                          <p className="text-[11px] text-slate-500 font-medium">Track tamping &amp; gauge alignment verified</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded bg-emerald-200 text-emerald-950">
+                        COMPLETE
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 border border-amber-300">
+                      <div className="flex items-center gap-2.5">
+                        <AlertTriangle size={18} className="text-amber-600 shrink-0" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">Traction (TRD / OHE)</p>
+                          <p className="text-[11px] text-amber-950 font-semibold">Amber Warning · OHE Ladder gang active</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded bg-amber-200 text-amber-950">
+                        IN PROGRESS
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                      <div className="flex items-center gap-2.5">
+                        <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">Signalling (S&amp;T)</p>
+                          <p className="text-[11px] text-slate-500 font-medium">Point machines &amp; signals certified and locked</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded bg-emerald-200 text-emerald-950">
+                        COMPLETE
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-950 text-xs font-medium leading-relaxed my-4">
+                    <p className="font-bold text-[10px] uppercase tracking-wider text-rose-900 mb-1 flex items-center gap-1.5">
+                      <ShieldCheck size={14} className="text-rose-700" />
+                      STATUTORY REGULATORY CLAUSE
+                    </p>
+                    "Under Indian Railways General Rules, an integrated block possession cannot be relinquished until all bundled department supervisors formally hand back their respective charge."
+                  </div>
+
+                  <div className="space-y-2 pt-1">
+                    <button
+                      disabled
+                      className="w-full py-3.5 px-4 rounded-xl bg-slate-200 text-slate-500 border border-slate-300 font-black text-xs sm:text-sm cursor-not-allowed flex items-center justify-center gap-2 shadow-none"
+                    >
+                      <Lock size={16} className="text-slate-400" />
+                      [Awaiting Co-Block Department Clearance]
+                    </button>
+
+                    <div className="flex items-center justify-between pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowSafetyInterlockModal(false)}
+                        className="text-xs text-slate-500 hover:text-slate-800 font-semibold"
+                      >
+                        Return to Field Console
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSimulatePartnerComplete();
+                          setShowSafetyInterlockModal(false);
+                        }}
+                        className="text-xs font-bold text-blue-700 hover:text-blue-900 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 flex items-center gap-1"
+                      >
+                        <RefreshCw size={12} />
+                        Simulate TRD Clearance
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </main>
         </div>
       </div>
-
-      {/* JOINT HANDBACK LOCKOUT SAFETY FEEDBACK MODAL */}
-      {showHandbackLockoutModal && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
-          onClick={() => setShowHandbackLockoutModal(false)}
-        >
-          <div 
-            className="bg-white rounded-3xl border border-amber-300 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200 text-slate-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="p-6 bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-amber-500/5 border-b border-amber-200/80 flex items-start justify-between gap-4">
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center shadow-md shadow-amber-600/30 shrink-0">
-                  <Lock size={24} />
-                </div>
-                <div>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
-                    Operational Safety Barrier
-                  </span>
-                  <h3 className="text-base font-black text-slate-900 mt-1 font-sans">
-                    Joint Handback Lockout (Integrated Block)
-                  </h3>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowHandbackLockoutModal(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-black transition-colors cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="p-6 space-y-5">
-              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 flex items-start gap-3">
-                <AlertTriangle size={20} className="text-amber-600 shrink-0 mt-0.5" />
-                <p className="text-xs font-semibold leading-relaxed">
-                  Cannot hand back line. Co-block partners (e.g. TRD / S&amp;T) are still actively working in this window. All bundled works must be marked COMPLETE first.
-                </p>
-              </div>
-
-              {/* Co-Block Partner Departments Status */}
-              <div className="space-y-2">
-                <p className="text-[11px] font-black text-slate-600 uppercase tracking-wider">
-                  Active Bundled Partner Tasks
-                </p>
-                <div className="space-y-2">
-                  {coBlockTasks.map(partner => (
-                    <div 
-                      key={partner.id}
-                      className={`p-3 rounded-xl border flex items-center justify-between gap-3 text-xs ${
-                        partner.is_complete 
-                          ? 'bg-emerald-50/70 border-emerald-200' 
-                          : 'bg-rose-50/70 border-rose-200 ring-1 ring-rose-300/40'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-black shrink-0 ${
-                          partner.is_complete ? 'bg-emerald-200 text-emerald-900' : 'bg-rose-200 text-rose-900'
-                        }`}>
-                          {partner.dept_short}
-                        </span>
-                        <div className="min-w-0">
-                          <p className="font-bold text-slate-900 truncate">{partner.task_title}</p>
-                          <p className="text-[10px] text-slate-500 font-mono mt-0.5">{partner.lead_in_charge}</p>
-                        </div>
-                      </div>
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-black shrink-0 ${
-                        partner.is_complete ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white animate-pulse'
-                      }`}>
-                        {partner.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Static Statutory Notice */}
-              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 space-y-1">
-                <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-700 uppercase tracking-wider">
-                  <ShieldCheck size={14} className="text-blue-600" />
-                  Statutory Notice
-                </div>
-                <p className="text-[11px] leading-relaxed font-medium">
-                  Prototype integrity barrier. Official track restoration follows Indian Railways G&amp;SR and Station Master authorization.
-                </p>
-              </div>
-
-              {/* Modal Actions */}
-              <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleSimulatePartnerComplete();
-                    setShowHandbackLockoutModal(false);
-                  }}
-                  className="w-full sm:flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <CheckCircle2 size={14} /> Simulate Partners Complete
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowHandbackLockoutModal(false)}
-                  className="w-full sm:flex-1 py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
-                >
-                  Acknowledge Lockout
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

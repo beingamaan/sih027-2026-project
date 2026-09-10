@@ -88,6 +88,11 @@ export const getPlans = async (): Promise<Plan[]> => {
   return res.data;
 };
 
+export const getBlocks = async (): Promise<any[]> => {
+  const res = await api.get('/api/blocks');
+  return res.data;
+};
+
 export const getPlan = async (id: number): Promise<Plan> => {
   const res = await api.get(`/api/plans/${id}`);
   return res.data;
@@ -155,3 +160,36 @@ export const getAuditLogs = async (): Promise<AuditLog[]> => {
   const res = await api.get('/api/audit');
   return res.data;
 };
+
+export const submitBlockFieldEvent = async (blockId: number | string, payload: {
+  task_id?: number;
+  step_event: string;
+  plan_version: number;
+  loss_code?: string;
+  remarks?: string;
+  actual_duration_minutes?: number;
+}): Promise<any> => {
+  const res = await api.post(`/api/blocks/${blockId}/field-event`, payload);
+  return res.data;
+};
+
+export const replanBlock = async (blockId: number | string, reason?: string): Promise<any> => {
+  const res = await api.post(`/api/blocks/${blockId}/replan`, { reason });
+  return res.data;
+};
+
+export const acknowledgeStationBlock = async (blockId: number | string, stationCode: string = 'GZB'): Promise<any> => {
+  const res = await api.post(`/api/blocks/${blockId}/sm-ack?station_code=${stationCode}`);
+  return res.data;
+};
+
+export const releaseJointHandback = async (payload?: {
+  block_code?: string;
+  section?: string;
+  departments?: Record<string, { signed: boolean; certified_at?: string } | boolean>;
+  reason_code?: string;
+}): Promise<any> => {
+  const res = await api.post('/api/blocks/handback', payload || {});
+  return res.data;
+};
+

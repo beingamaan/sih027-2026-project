@@ -82,7 +82,18 @@ export interface Task {
   status: TaskStatus;
   read_only?: boolean;
   co_block_partner?: boolean;
+  is_co_block_partner?: boolean;
+  can_edit?: boolean;
+  can_verify?: boolean;
+  edit_actions?: string[];
   created_at?: string;
+  dept?: string;
+  workflow_lane?: string;
+  start_km?: number;
+  end_km?: number;
+  duration_min?: number;
+  priority_pts?: number;
+  readiness_pts?: number;
 }
 
 export interface TrainPath {

@@ -28,7 +28,7 @@ export const AuditPage: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-[#F7F8F5]">
       <Sidebar />
-      <main className={`flex-1 transition-all duration-300 ${isCollapsed ? 'ml-20' : 'ml-[260px]'} p-6 relative z-10`}>
+      <main className="flex-1 min-w-0 transition-all duration-300 p-6 relative z-10">
         
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl glass-panel-elevated mb-6 border border-white/90">

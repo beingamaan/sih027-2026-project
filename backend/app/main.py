@@ -1,8 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+from app.dependencies import get_db, require
+from app.models import Task, BlockPlan, StateProjection
 from app.routes import (
     tasks, plans, field, dashboard, analytics,
-    trains, resources, corridor, events, audit, what_if_route, auth
+    trains, resources, corridor, events, audit, what_if_route, auth, blocks
 )
 
 app = FastAPI(
@@ -11,18 +14,33 @@ app = FastAPI(
     version="2.0.0"
 )
 
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://localhost:5175",
+    "http://127.0.0.1:5175",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=origins,
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Register all REST API endpoints
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+app.include_router(auth.router, prefix="/auth", tags=["Auth Direct"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["Tasks"])
+app.include_router(blocks.router, prefix="/api/blocks", tags=["Blocks"])
+app.include_router(blocks.router, prefix="/blocks", tags=["Blocks Direct"])
 app.include_router(trains.router, prefix="/api/trains", tags=["Trains"])
 app.include_router(resources.router, prefix="/api/resources", tags=["Resources"])
 app.include_router(corridor.router, prefix="/api/corridor", tags=["Corridor"])
@@ -32,6 +50,36 @@ app.include_router(events.router, prefix="/api/block-events", tags=["Block Event
 app.include_router(field.router, prefix="/api/field", tags=["Field Execution"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
 app.include_router(audit.router, prefix="/api/audit", tags=["Audit"])
+
+@app.get("/api/command")
+@app.get("/command")
+def get_command_center(
+    current_user: dict = Depends(require("VIEW_COMMAND", "SECTION_CONTROLLER")),
+    db: Session = Depends(get_db)
+):
+    """
+    Command Center Access:
+    Strictly guarded for SECTION_CONTROLLER or DIVISIONAL_OFFICER with VIEW_COMMAND capability.
+    Unauthorized roles (e.g. STATION_MASTER, DEPT_SUPERVISOR) are rejected with HTTP 403 Forbidden
+    and an immutable ACCESS_DENIED security audit log entry is recorded.
+    """
+    tasks_all = db.query(Task).all()
+    proj_map = {p.ref_id: p.stage for p in db.query(StateProjection).filter(StateProjection.ref_type == "TASK").all()}
+    # Exclude raw unverified REPORTED tasks from Section Controller's view
+    eligible_tasks = [
+        t for t in tasks_all 
+        if proj_map.get(t.task_code, getattr(t.status, 'value', str(t.status))) != "REPORTED"
+    ]
+    plans_all = db.query(BlockPlan).all()
+    return {
+        "status": "ok",
+        "message": "Section Controller Command Center active",
+        "user": current_user.get("sub"),
+        "role": current_user.get("role"),
+        "tasks_count": len(eligible_tasks),
+        "task_codes": [t.task_code for t in eligible_tasks],
+        "plans_count": len(plans_all)
+    }
 
 @app.get("/health")
 def health_check():

@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, String, Float, ForeignKey, DateTime, Text, Enum as SQLEnum, event
+    Column, Integer, BigInteger, String, Float, ForeignKey, DateTime, Text, Boolean, JSON, Enum as SQLEnum, event
 )
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -20,6 +20,7 @@ class TaskStatus(str, enum.Enum):
     VERIFIED = "VERIFIED"
     ELIGIBLE = "ELIGIBLE"
     SCHEDULED = "SCHEDULED"
+    IN_PROGRESS = "IN_PROGRESS"
     EXECUTED = "EXECUTED"
     CLOSED = "CLOSED"
     # Side states
@@ -120,6 +121,9 @@ class BlockPlanStatus(str, enum.Enum):
     NOTIFIED = "NOTIFIED"
     ACK_COMPLETE = "ACK_COMPLETE"
     SANCTION_READY = "SANCTION_READY"
+    IN_PROGRESS = "IN_PROGRESS"
+    HANDBACK_READY = "HANDBACK_READY"
+    HANDED_BACK = "HANDED_BACK"
     CLOSED = "CLOSED"
     # Side states
     REJECTED = "REJECTED"
@@ -135,6 +139,7 @@ class BlockPlanStatus(str, enum.Enum):
                 "OVERRIDDEN": cls.REJECTED,
                 "FEASIBLE": cls.RECOMMENDED,
                 "OPTIMAL": cls.RECOMMENDED,
+                "SANCTIONED": cls.APPROVED,
             }
             if val_upper in aliases:
                 return aliases[val_upper]
@@ -194,25 +199,69 @@ class DelayLossCode(str, enum.Enum):
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
-    employee_id = Column(String, unique=True, index=True, nullable=False)
-    name = Column(String, nullable=False)
-    role = Column(String, nullable=False)
-    department = Column(String, nullable=False)
-    division = Column(String, nullable=False)
+    service_id = Column(String, unique=True, index=True, nullable=True)
+    employee_id = Column(String, index=True, nullable=True)
     password_hash = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    designation = Column(String, nullable=False, default="Railway Official")
+    role = Column(String, nullable=False)  # SECTION_CONTROLLER, DEPT_SUPERVISOR, DIVISIONAL_OFFICER, FIELD_EXEC_LEAD, FIELD_INSPECTOR, STATION_MASTER
+    department = Column(String, nullable=False)  # ENG, TRD, SNT, OPS
+    division_id = Column(String, nullable=False, default="DLI")
+    division = Column(String, nullable=False, default="DLI")
+    section_ids = Column(JSON, default=list)  # e.g. [1, 2, 3]
+    team_id = Column(Integer, nullable=True)
+    station_id = Column(Integer, nullable=True)
+    is_active = Column(Boolean, default=True)
     active = Column(Integer, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    def __init__(self, **kwargs):
+        if "service_id" in kwargs and "employee_id" not in kwargs:
+            kwargs["employee_id"] = kwargs["service_id"]
+        elif "employee_id" in kwargs and "service_id" not in kwargs:
+            kwargs["service_id"] = kwargs["employee_id"]
+
+        if "division_id" in kwargs and "division" not in kwargs:
+            kwargs["division"] = kwargs["division_id"]
+        elif "division" in kwargs and "division_id" not in kwargs:
+            kwargs["division_id"] = kwargs["division"]
+
+        if "is_active" in kwargs and "active" not in kwargs:
+            kwargs["active"] = 1 if kwargs["is_active"] else 0
+        elif "active" in kwargs and "is_active" not in kwargs:
+            kwargs["is_active"] = bool(kwargs["active"])
+
+        super().__init__(**kwargs)
 
 
 class Station(Base):
     __tablename__ = "stations"
     id = Column(Integer, primary_key=True, index=True)
-    station_code = Column(String, unique=True, nullable=False)
+    code = Column(String, unique=True, nullable=True)
+    station_code = Column(String, unique=True, nullable=True)
     name = Column(String, nullable=False)
-    division = Column(String, nullable=False)
+    division = Column(String, nullable=False, default="DLI")
     chainage_km = Column(Float, nullable=False)
 
     interlocking_areas = relationship("InterlockingArea", back_populates="station")
+
+    def __init__(self, **kwargs):
+        if "code" in kwargs and "station_code" not in kwargs:
+            kwargs["station_code"] = kwargs["code"]
+        elif "station_code" in kwargs and "code" not in kwargs:
+            kwargs["code"] = kwargs["station_code"]
+        super().__init__(**kwargs)
+
+
+class TrainSchedule(Base):
+    __tablename__ = "train_schedules"
+    id = Column(Integer, primary_key=True, index=True)
+    train_number = Column(String, index=True, nullable=False)
+    train_name = Column(String, nullable=False)
+    priority_class = Column(String, nullable=False)  # 'PREMIUM', 'SUPERFAST', 'EXPRESS', 'GOODS', 'SUBURBAN'
+    origin_time = Column(String, nullable=False)     # "HH:MM"
+    station_entries = Column(JSON, default=list)     # Array of { station_code: str, km: float, arr: str, dep: str, arr_min: int, dep_min: int }
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class BlockSection(Base):
@@ -596,6 +645,18 @@ class AuditLog(Base):
         super().__init__(**kwargs)
 
 
+class SecurityAuditLog(Base):
+    __tablename__ = "security_audit_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    actor_id = Column(String, nullable=True, index=True)
+    actor_role = Column(String, nullable=True)
+    action = Column(String, nullable=False)  # LOGIN_SUCCESS, LOGIN_FAILED, ACCESS_DENIED
+    endpoint = Column(String, nullable=True)
+    ip_address = Column(String, nullable=True)
+    details = Column(String, nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+
 # ==============================================================================
 # IMMUTABILITY ENFORCEMENT HOOKS
 # ==============================================================================
@@ -618,3 +679,56 @@ def prevent_field_event_update(mapper, connection, target):
 @event.listens_for(FieldEvent, 'before_delete')
 def prevent_field_event_delete(mapper, connection, target):
     raise RuntimeError("FieldEvent is an append-only log. Deletions are strictly forbidden.")
+
+
+@event.listens_for(SecurityAuditLog, 'before_update')
+def prevent_security_audit_log_update(mapper, connection, target):
+    raise RuntimeError("SecurityAuditLog is immutable. Updates are strictly forbidden.")
+
+
+@event.listens_for(SecurityAuditLog, 'before_delete')
+def prevent_security_audit_log_delete(mapper, connection, target):
+    raise RuntimeError("SecurityAuditLog is immutable. Deletions are strictly forbidden.")
+
+
+# ==============================================================================
+# 4. APPEND-ONLY EVENT LOG & REBUILDABLE STATE PROJECTIONS (PHASE 2 BLUEPRINT)
+# ==============================================================================
+
+class EventLog(Base):
+    __tablename__ = "event_log"
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    ref_type = Column(String, nullable=False)   # 'TASK' | 'BLOCK_REQUEST'
+    ref_id = Column(String, index=True, nullable=False)
+    stage = Column(String, nullable=False)
+    event = Column(String, nullable=False)
+    actor_id = Column(String, nullable=False)
+    actor_role = Column(String, nullable=False)
+    actor_dept = Column(String, nullable=False)
+    plan_version = Column(Integer, default=1)
+    reason_code = Column(String, nullable=True)
+    payload = Column(JSON, nullable=True)
+    ts = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class StateProjection(Base):
+    __tablename__ = "state_projection"
+    id = Column(Integer, primary_key=True)
+    ref_type = Column(String, index=True, nullable=False)  # 'TASK' | 'BLOCK_REQUEST'
+    ref_id = Column(String, unique=True, index=True, nullable=False)
+    stage = Column(String, nullable=False)
+    plan_version = Column(Integer, default=1)
+    last_event = Column(String, nullable=False)
+    last_actor_id = Column(String, nullable=False)
+    last_event_ts = Column(DateTime, nullable=False)
+    reason_code = Column(String, nullable=True)
+
+
+@event.listens_for(EventLog, 'before_update')
+def prevent_event_log_update(mapper, connection, target):
+    raise RuntimeError("CRITICAL ARCHITECTURAL VIOLATION: event_log is strictly append-only. Modifying or deleting records is forbidden.")
+
+
+@event.listens_for(EventLog, 'before_delete')
+def prevent_event_log_delete(mapper, connection, target):
+    raise RuntimeError("CRITICAL ARCHITECTURAL VIOLATION: event_log is strictly append-only. Modifying or deleting records is forbidden.")

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Sidebar, useSidebar } from '../components/layout/Sidebar';
 import { Header } from '../components/layout/Header';
+import { HeroBanner } from '../components/layout/HeroBanner';
 import { useRole } from '../context/RoleContext';
 import { RoleSwitcher } from '../components/layout/RoleSwitcher';
 import { 
@@ -19,9 +20,11 @@ import {
 } from '../services/railwayApi';
 import { CorridorState, TrainPath, Task, DualPlanResponse, WhatIfResponse, DashboardSummary, AuditLog } from '../types';
 import { MareyChart } from '../components/charts/MareyChart';
+import { OccupancyView } from '../components/charts/OccupancyView';
 import { WAP7LocomotiveArtwork } from '../components/dashboard/WAP7LocomotiveArtwork';
 import { ScenicTrainHeroArtwork } from '../components/dashboard/ScenicTrainHeroArtwork';
 import { CorridorDiagnosticsAndEvents } from '../components/dashboard/CorridorDiagnosticsAndEvents';
+import { CorridorTrackTopology } from '../components/corridor/CorridorTrackTopology';
 
 interface ReadinessInfo {
   score: number;
@@ -59,7 +62,7 @@ export const CommandCenter: React.FC = () => {
   const [hoveredTrain, setHoveredTrain] = useState<string | null>(null);
   const [hoveredBlock, setHoveredBlock] = useState<string | null>(null);
 
-  // Corridor Physical Track Radar Interactive States
+  // Corridor Physical Track Strip Interactive States
   const [hoveredStation, setHoveredStation] = useState<{
     code: string;
     name: string;
@@ -68,7 +71,7 @@ export const CommandCenter: React.FC = () => {
     interlocking: string;
     type: string;
   } | null>(null);
-  const [hoveredRadarTrain, setHoveredRadarTrain] = useState<{
+  const [hoveredCorridorTrain, setHoveredCorridorTrain] = useState<{
     trainNo: string;
     name: string;
     priority: string;
@@ -89,7 +92,7 @@ export const CommandCenter: React.FC = () => {
   const [showLaneAModal, setShowLaneAModal] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<string>(new Date().toLocaleTimeString());
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
-  const [commandTab, setCommandTab] = useState<'RADAR' | 'MAREY' | 'WHATIF'>('RADAR');
+  const [commandTab, setCommandTab] = useState<'TOPOLOGY' | 'MAREY' | 'WHATIF'>('MAREY');
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -705,7 +708,7 @@ export const CommandCenter: React.FC = () => {
             </div>
 
             <div className="mt-3.5 flex items-center justify-between text-xs text-[#627D98] pt-2 border-t border-[#D9E0E8]">
-              <span>Showing {displayTaskList.length} calibrated tasks across Section STA–STD</span>
+              <span>Showing {displayTaskList.length} calibrated tasks across Section GZB–TDL</span>
               <span className="font-mono text-[11px] font-bold text-[#102A43]">
                 G&SR Section 4.14 Compliant
               </span>
@@ -920,76 +923,16 @@ export const CommandCenter: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-[#F7F8F5]">
       <Sidebar />
-      <div className={`flex-1 ${isCollapsed ? 'ml-20' : 'ml-[260px]'} transition-all duration-300 ease-in-out flex flex-col min-w-0`}>
+      <div className="flex-1 min-w-0 flex flex-col transition-all duration-300 ease-in-out">
         {/* GLOBAL TOP HEADER */}
         <Header />
 
         <main className="p-6 relative z-10 space-y-6 flex-1">
-          {/* 4. HERO BANNER & STATS ROW (1:1 Reference Layout) */}
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#FFFBF2] via-[#FFF9EE] to-[#F2EDE4] border border-[#E8E2D5] p-8 shadow-sm flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6">
-            {/* Left Title & Division Details */}
-            <div className="max-w-md z-10">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#102A43] text-[#ECC94B] text-[10px] font-black uppercase tracking-wider mb-2.5">
-                <span className="w-2 h-2 rounded-full bg-[#ECC94B] animate-pulse"></span>
-                Safe Rails, Stronger India
-              </div>
-              <h1 className="text-3xl sm:text-4xl font-black text-[#0F2841] tracking-tight font-serif-hero leading-tight">
-                Operations Command Center
-              </h1>
-              <div className="flex items-center gap-2 text-xs font-mono font-bold text-[#1E5AA8] uppercase tracking-wider mt-2 flex-wrap">
-                <span className="bg-[#EAF2FF] px-2 py-0.5 rounded border border-[#BFDBFE]/60">Delhi Division</span>
-                <span>•</span>
-                <span>KM 100 – 158</span>
-                <span>•</span>
-                <span className="text-[#627D98] font-sans font-semibold">Department Supervisor Maintenance</span>
-              </div>
-              <p className="italic text-slate-500 text-sm mt-2">
-                "Safe Rails, Stronger India"
-              </p>
-            </div>
-
-            {/* Center: Full-Width Scenic Landscape Vande Bharat Train Artwork */}
-            <div className="flex flex-col items-center justify-center flex-1 max-w-xl w-full hidden md:flex z-10 px-4">
-              <ScenicTrainHeroArtwork className="w-full max-w-lg h-auto" />
-            </div>
-
-            {/* Far Right: Weather & Calendar Card with Tricolor Ribbon */}
-            <div className="bg-white/85 backdrop-blur-md border border-[#E2E8F0] p-5 rounded-2xl shadow-sm shrink-0 max-w-[280px] w-full z-10">
-              <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#E2E8F0]">
-                <span className="text-[10px] font-extrabold text-[#627D98] uppercase">Section Status</span>
-                <span className="flex items-center gap-1.5 text-[10px] font-bold text-[#16805C]">
-                  <span className="w-2 h-2 rounded-full bg-[#16805C] animate-ping"></span>
-                  LIVE
-                </span>
-              </div>
-              <p className="text-xs font-mono font-bold text-[#102A43]">
-                {currentTime.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })} | {currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} IST
-              </p>
-              <p className="text-[11px] text-[#486581] font-medium mt-1 flex items-center gap-1.5">
-                <Sun size={13} className="text-[#D9901A]" />
-                28°C Clear Sky · Delhi Division
-              </p>
-
-              {/* Viksit Bharat / Viksit Rail badge with Tricolor Ribbon */}
-              <div className="mt-3 pt-2.5 border-t border-[#E2E8F0] flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase text-[#102A43] tracking-wider">
-                  Viksit Bharat / Viksit Rail
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <div className="flex flex-col h-3.5 w-4 rounded-xs overflow-hidden border border-slate-200 shrink-0 shadow-2xs">
-                    <div className="h-1 bg-[#FF9933]"></div>
-                    <div className="h-1.5 bg-[#FFFFFF] flex items-center justify-center">
-                      <div className="w-1 h-1 rounded-full bg-[#000080]"></div>
-                    </div>
-                    <div className="h-1 bg-[#138808]"></div>
-                  </div>
-                  <span className="text-[10px] font-bold text-[#D9901A] bg-[#FFF7E6] px-2 py-0.5 rounded border border-[#FFE7BA]">
-                    2047
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* 4. HERO BANNER (Vande Bharat Authentic Banner) */}
+          <HeroBanner 
+            title="Operations Command Center" 
+            subtitle="Decision Support & Capacity Preservation" 
+          />
 
           {/* 4 STAT METRIC CARDS WITH SPARKLINE ACCENTS (Exact Reference Layout) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -1183,17 +1126,17 @@ export const CommandCenter: React.FC = () => {
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
-                onClick={() => setCommandTab('RADAR')}
+                onClick={() => setCommandTab('TOPOLOGY')}
                 className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                  commandTab === 'RADAR'
+                  commandTab === 'TOPOLOGY'
                     ? 'bg-[#9E1B28] text-white shadow-md shadow-[#9E1B28]/25 font-black'
                     : 'text-[#486581] hover:text-[#102A43] hover:bg-white/80 font-semibold'
                 }`}
               >
-                <Radio size={14} className={commandTab === 'RADAR' ? 'text-white animate-pulse' : 'text-[#627D98]'} />
-                <span>🚆 Live Corridor Radar &amp; Topology</span>
+                <Radio size={14} className={commandTab === 'TOPOLOGY' ? 'text-white animate-pulse' : 'text-[#627D98]'} />
+                <span>🚆 Live Corridor Topology &amp; Strip Map</span>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${
-                  commandTab === 'RADAR' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-700'
+                  commandTab === 'TOPOLOGY' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-700'
                 }`}>
                   58 KM
                 </span>
@@ -1239,7 +1182,7 @@ export const CommandCenter: React.FC = () => {
             <div className="hidden sm:flex items-center gap-2 text-xs text-[#627D98] px-3 font-medium">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span className="font-mono text-[11px] text-[#102A43] font-bold">
-                {commandTab === 'RADAR' && '58 KM Live Radar & Asset Geometry Active'}
+                {commandTab === 'TOPOLOGY' && '58 KM Live Track & Asset Geometry Active'}
                 {commandTab === 'MAREY' && 'Marey Time-Distance Trajectories Active'}
                 {commandTab === 'WHATIF' && 'Monte Carlo Disruption & Dual-Plan Engine'}
               </span>
@@ -1247,9 +1190,9 @@ export const CommandCenter: React.FC = () => {
           </div>
 
           {/* ========================================================================= */}
-          {/* TAB 1: LIVE CORRIDOR RADAR & TOPOLOGY (DEFAULT)                           */}
+          {/* TAB 1: LIVE CORRIDOR TOPOLOGY & STRIP MAP (DEFAULT)                      */}
           {/* ========================================================================= */}
-          {commandTab === 'RADAR' && (
+          {commandTab === 'TOPOLOGY' && (
             <div className="space-y-6">
 
           {/* ROLE 3: FIELD EXECUTION LEAD ASSIGNED WORKSITE CARD */}
@@ -1342,52 +1285,6 @@ export const CommandCenter: React.FC = () => {
           {/* MACRO-CORRIDOR WORKSPACE (Task Queue + Readiness Gate) */}
           {!isFieldWorker && renderTaskQueueSection(false)}
 
-        {/* 3. DEMO SCENARIO PRESETS BAR */}
-        <div className="flex items-center justify-between gap-4 p-4 nova-card flex-wrap">
-          <div className="flex items-center gap-3">
-            <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 px-3 py-1.5 bg-slate-100/90 rounded-xl">
-              Demo Presets
-            </span>
-            <span className="text-xs text-slate-500 font-semibold hidden sm:inline">• 1-Click Operations Simulation</span>
-          </div>
-
-          <div className="flex items-center gap-3 flex-wrap">
-            <button
-              onClick={() => {
-                setWeatherCondition('CLEAR');
-                setMachineDelay(0);
-                handleRunWhatIf(0, 'CLEAR');
-                setActivePlanType('PLAN_A');
-              }}
-              className="px-4 py-2 rounded-xl bg-white/80 hover:bg-white border border-slate-200 text-xs font-black text-slate-800 flex items-center gap-1.5 transition-all active:scale-98 cursor-pointer shadow-2xs"
-            >
-              <span>⚡</span> Default Morning Corridor
-            </button>
-
-            <button
-              onClick={() => {
-                setWeatherCondition('RAIN');
-                setMachineDelay(30);
-                handleRunWhatIf(30, 'RAIN');
-                setActivePlanType('PLAN_B');
-              }}
-              className="px-4 py-2 rounded-xl bg-amber-50/90 hover:bg-amber-100/90 border border-amber-200 text-amber-800 text-xs font-black flex items-center gap-1.5 transition-all active:scale-98 cursor-pointer shadow-2xs"
-            >
-              <span>🌧️</span> Trigger Monsoon & Machine Delay
-            </button>
-
-            <button
-              onClick={() => {
-                const emergencyTask = tasks.find(t => t.task_code === 'TSK_ENG_01') || null;
-                if (emergencyTask) setSelectedTask(emergencyTask);
-                setShowLaneAModal(true);
-              }}
-              className="px-4 py-2 rounded-xl bg-rose-50/90 hover:bg-rose-100/90 border border-rose-200 text-rose-800 text-xs font-black flex items-center gap-1.5 transition-all active:scale-98 cursor-pointer shadow-2xs"
-            >
-              <span>🚨</span> View Lane A Emergency Incident
-            </button>
-          </div>
-        </div>
 
         {/* Lane A Emergency Protocol Banner */}
         <div className="p-5 nova-card border-rose-200/90 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -1403,7 +1300,7 @@ export const CommandCenter: React.FC = () => {
                 <span className="text-xs font-black text-rose-950">Task TSK_ENG_01 · Emergency Fractured Rail Clamp Replacement</span>
               </div>
               <p className="text-xs text-rose-800 mt-0.5 font-medium">
-                Location: KM 104.2 (SEC A-B) · Excluded from automated scheduler. Handled via standard Indian Railways emergency safety rules.
+                Location: KM 104.2 (SEC GZB–ANVR) · Excluded from automated scheduler. Handled via standard Indian Railways emergency safety rules.
               </p>
             </div>
           </div>
@@ -1414,712 +1311,9 @@ export const CommandCenter: React.FC = () => {
           </div>
         </div>
 
-        {/* 4. 58 KM CORRIDOR STRIP MAP - DYNAMIC RAILWAY RADAR */}
-        <div className="p-6 nova-card">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="relative flex h-3 w-3 items-center justify-center">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600"></span>
-              </div>
-              <div>
-                <h2 className="text-xs font-black text-[#0F172A] uppercase tracking-wider flex items-center gap-2">
-                  Corridor Physical Track Topology
-                  <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-full">
-                    LIVE RADAR
-                  </span>
-                </h2>
-                <p className="text-[10px] text-slate-500 font-medium">
-                  58 km corridor · Stations A, B, C, D · Auto-synchronized block signaling
-                </p>
-              </div>
-            </div>
+        <CorridorTrackTopology onInspectBlock={() => setIsBlockDetailOpen(true)} />
 
-            {/* Legend Chips */}
-            <div className="flex items-center gap-3 text-[10px] text-slate-600 font-bold flex-wrap">
-              <span className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-md border border-slate-200 shadow-2xs">
-                <span className="w-3.5 h-1.5 bg-[#2563EB] rounded-xs"></span> Double Main (UP)
-              </span>
-              <span className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-md border border-slate-200 shadow-2xs">
-                <span className="w-3.5 h-1.5 bg-[#0284C7] rounded-xs"></span> Double Main (DOWN)
-              </span>
-              <span className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-md border border-slate-200 shadow-2xs">
-                <span className="w-3.5 h-2 bg-[#7C3AED] rounded-xs"></span> Single Line (SEC C-D)
-              </span>
-              <span className="flex items-center gap-1.5 bg-amber-50 text-amber-900 px-2 py-1 rounded-md border border-amber-300 shadow-2xs">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span> Joint Block Zone
-              </span>
-            </div>
-          </div>
 
-          {/* Dynamic Radar Canvas with Extended 240px Height & 4 Spaced Tiers */}
-          <div className="bg-gradient-to-b from-slate-50/90 to-blue-50/30 p-5 rounded-2xl border border-slate-200/90 overflow-x-auto shadow-xs relative">
-            <svg width="1000" height="240" viewBox="0 0 1000 240" className="w-full select-none">
-              <defs>
-                {/* Diagonal Caution Hazard Stripes Pattern */}
-                <pattern id="hazardStripes" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-                  <rect width="6" height="12" fill="#F59E0B" fillOpacity="0.10" />
-                  <rect x="6" width="6" height="12" fill="#0284C7" fillOpacity="0.06" />
-                </pattern>
-
-                {/* Joint Block Soft Amber/Cyan Gradient Glow */}
-                <linearGradient id="jointBlockGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#FEF3C7" stopOpacity="0.65" />
-                  <stop offset="50%" stopColor="#E0F2FE" stopOpacity="0.5" />
-                  <stop offset="100%" stopColor="#FEF3C7" stopOpacity="0.65" />
-                </linearGradient>
-
-                <linearGradient id="workZoneAmberGlow" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#FEF3C7" stopOpacity="0.75" />
-                  <stop offset="50%" stopColor="#EFF6FF" stopOpacity="0.45" />
-                  <stop offset="100%" stopColor="#FEF3C7" stopOpacity="0.75" />
-                </linearGradient>
-
-                <linearGradient id="upTrackGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#2563EB" />
-                  <stop offset="100%" stopColor="#3B82F6" />
-                </linearGradient>
-
-                <linearGradient id="downTrackGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#0284C7" />
-                  <stop offset="100%" stopColor="#0EA5E9" />
-                </linearGradient>
-
-                <linearGradient id="singleTrackGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#7C3AED" />
-                  <stop offset="100%" stopColor="#8B5CF6" />
-                </linearGradient>
-
-                {/* Headlamp Beam Glow Gradients */}
-                <linearGradient id="shatabdiHeadlamp" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#60A5FA" stopOpacity="0.9" />
-                  <stop offset="35%" stopColor="#38BDF8" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="#38BDF8" stopOpacity="0" />
-                </linearGradient>
-
-                <linearGradient id="rajdhaniHeadlamp" x1="100%" y1="0%" x2="0%" y2="0%">
-                  <stop offset="0%" stopColor="#F87171" stopOpacity="0.9" />
-                  <stop offset="35%" stopColor="#FCA5A5" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="#FCA5A5" stopOpacity="0" />
-                </linearGradient>
-
-                <linearGradient id="freightHeadlamp" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#FDE047" stopOpacity="0.85" />
-                  <stop offset="40%" stopColor="#FDE047" stopOpacity="0.3" />
-                  <stop offset="100%" stopColor="#FDE047" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-
-              {/* 0. SCHEMATIC GEOGRAPHIC MAP UNDERLAY (Background Terrain & Route Grid) */}
-              <g id="geographicMapUnderlay" className="pointer-events-none select-none">
-                {/* Coordinate Grid Lines */}
-                <line x1="0" y1="18" x2="1000" y2="18" stroke="#CBD5E1" strokeWidth="0.75" strokeDasharray="3,3" opacity="0.25" />
-                <line x1="0" y1="148" x2="1000" y2="148" stroke="#CBD5E1" strokeWidth="0.75" strokeDasharray="3,3" opacity="0.25" />
-                <line x1="200" y1="0" x2="200" y2="240" stroke="#CBD5E1" strokeWidth="0.75" strokeDasharray="3,3" opacity="0.25" />
-                <line x1="550" y1="0" x2="550" y2="240" stroke="#CBD5E1" strokeWidth="0.75" strokeDasharray="3,3" opacity="0.25" />
-                <line x1="820" y1="0" x2="820" y2="240" stroke="#CBD5E1" strokeWidth="0.75" strokeDasharray="3,3" opacity="0.25" />
-
-                {/* GIS Latitude / Longitude Stamps */}
-                <text x="45" y="14" fill="#64748B" opacity="0.45" fontSize="6.5" fontFamily="monospace" fontWeight="600">
-                  28°14'12"N · 77°45'30"E [STA SECTOR]
-                </text>
-                <text x="345" y="14" fill="#64748B" opacity="0.45" fontSize="6.5" fontFamily="monospace" fontWeight="600">
-                  28°11'45"N · 77°58'10"E [STB SECTOR]
-                </text>
-                <text x="665" y="14" fill="#64748B" opacity="0.45" fontSize="6.5" fontFamily="monospace" fontWeight="600">
-                  28°08'02"N · 78°12'44"E [STC SECTOR]
-                </text>
-                <text x="875" y="14" fill="#64748B" opacity="0.45" fontSize="6.5" fontFamily="monospace" fontWeight="600">
-                  28°05'18"N · 78°24'02"E [STD]
-                </text>
-
-                {/* Stylized Terrain / Agricultural Land Parcel Patches */}
-                <polygon points="120,6 240,10 220,30 105,26" fill="#DCFCE7" opacity="0.2" stroke="#86EFAC" strokeWidth="0.8" strokeDasharray="3,2" />
-                <polygon points="730,150 850,154 830,195 715,190" fill="#DCFCE7" opacity="0.2" stroke="#86EFAC" strokeWidth="0.8" strokeDasharray="3,2" />
-
-                {/* District Administrative Boundary Markings */}
-                <path d="M 260 0 L 275 48 L 265 145 L 285 240" stroke="#94A3B8" strokeWidth="1" strokeDasharray="6,3,1.5,3" fill="none" opacity="0.25" />
-                <text x="270" y="8" fill="#94A3B8" opacity="0.45" fontSize="5.5" fontWeight="bold" letterSpacing="1">
-                  DIST BORDER (NW-14)
-                </text>
-
-                <path d="M 640 0 L 625 60 L 645 145 L 630 240" stroke="#94A3B8" strokeWidth="1" strokeDasharray="6,3,1.5,3" fill="none" opacity="0.25" />
-                <text x="635" y="235" fill="#94A3B8" opacity="0.45" fontSize="5.5" fontWeight="bold" letterSpacing="1">
-                  DIST BORDER (CW-02)
-                </text>
-
-                {/* Soft Terrain Contour Curves */}
-                <path d="M 0 46 C 200 36, 400 54, 600 40 C 760 26, 880 42, 1000 34" stroke="#CBD5E1" strokeWidth="1" fill="none" opacity="0.25" strokeDasharray="4,4" />
-                <text x="25" y="44" fill="#94A3B8" opacity="0.4" fontSize="6.5" fontFamily="monospace">EL 214m</text>
-
-                <path d="M 0 145 C 240 155, 470 138, 680 150 C 820 158, 920 144, 1000 152" stroke="#CBD5E1" strokeWidth="1" fill="none" opacity="0.25" strokeDasharray="4,4" />
-                <text x="860" y="152" fill="#94A3B8" opacity="0.4" fontSize="6.5" fontFamily="monospace">EL 188m</text>
-
-                {/* Soft River / Canal Water Body between STB and STC (Y: 60 to 140, opacity: 0.2) */}
-                <path d="M 550 50 C 535 75, 570 100, 545 135 C 535 150, 540 165, 535 165" fill="none" stroke="#38BDF8" strokeWidth="26" opacity="0.2" strokeLinecap="round" />
-                <path d="M 550 50 C 535 75, 570 100, 545 135 C 535 150, 540 165, 535 165" fill="none" stroke="#0284C7" strokeWidth="2" opacity="0.22" strokeDasharray="8,4" />
-                <text x="557" y="135" fill="#0284C7" opacity="0.4" fontSize="6.5" fontWeight="bold" letterSpacing="1" transform="rotate(-75 557 135)">
-                  BETWA CANAL (KM 131.2)
-                </text>
-
-                {/* Railway Bridge Girder Truss Structure crossing the River (Behind Tracks) */}
-                <line x1="525" y1="88" x2="575" y2="88" stroke="#475569" strokeWidth="1.8" opacity="0.4" />
-                <line x1="525" y1="112" x2="575" y2="112" stroke="#475569" strokeWidth="1.8" opacity="0.4" />
-                <line x1="530" y1="88" x2="540" y2="112" stroke="#64748B" strokeWidth="1" opacity="0.3" />
-                <line x1="540" y1="88" x2="530" y2="112" stroke="#64748B" strokeWidth="1" opacity="0.3" />
-                <line x1="540" y1="88" x2="550" y2="112" stroke="#64748B" strokeWidth="1" opacity="0.3" />
-                <line x1="550" y1="88" x2="540" y2="112" stroke="#64748B" strokeWidth="1" opacity="0.3" />
-                <line x1="550" y1="88" x2="560" y2="112" stroke="#64748B" strokeWidth="1" opacity="0.3" />
-                <line x1="560" y1="88" x2="550" y2="112" stroke="#64748B" strokeWidth="1" opacity="0.3" />
-                <line x1="560" y1="88" x2="570" y2="112" stroke="#64748B" strokeWidth="1" opacity="0.3" />
-                <line x1="570" y1="88" x2="560" y2="112" stroke="#64748B" strokeWidth="1" opacity="0.3" />
-                <text x="550" y="83" textAnchor="middle" fill="#475569" opacity="0.6" fontSize="6.5" fontWeight="bold">
-                  BR. NO. 42 (TRUSS)
-                </text>
-              </g>
-
-              {/* LAYER 1: TOP CLEARANCE BADGES (Y: 30 to 45) */}
-              {/* TSR 30 Caution Badge (Centered at KM 106, Y = 32) */}
-              <g transform="translate(160, 32)">
-                <rect x="-24" y="-10" width="48" height="20" rx="4" fill="rgba(254, 243, 199, 0.95)" stroke="#f59e0b" strokeWidth="1.5" />
-                <text x="0" y="3.5" textAnchor="middle" className="text-[8.5px] font-black fill-amber-900 metric-mono">TSR 30</text>
-              </g>
-
-              {/* TSR 45 Caution Badge (Centered at KM 128, Y = 32) */}
-              <g transform="translate(518, 32)">
-                <rect x="-24" y="-10" width="48" height="20" rx="4" fill="rgba(254, 243, 199, 0.95)" stroke="#f59e0b" strokeWidth="1.5" />
-                <text x="0" y="3.5" textAnchor="middle" className="text-[8.5px] font-black fill-amber-900 metric-mono">TSR 45</text>
-              </g>
-
-              {/* PREMIUM INTERACTIVE JOINT BLOCK ZONE (Y = 70 to Y = 130, Height = 60, Clickable) */}
-              <g 
-                className="cursor-pointer transition-all duration-200 hover:brightness-105 group"
-                onClick={() => setIsBlockDetailOpen(true)}
-                onMouseEnter={() => setHoveredWorkZone(true)}
-                onMouseLeave={() => setHoveredWorkZone(false)}
-              >
-                {/* Base Glass Gradient Area */}
-                <rect 
-                  x="134" y="70" width="336" height="60" rx="8" 
-                  fill="url(#jointBlockGrad)" 
-                  stroke="#F59E0B" 
-                  strokeWidth="2" 
-                  strokeDasharray="6 4"
-                >
-                  <animate attributeName="stroke-dashoffset" values="0;20" dur="2s" repeatCount="indefinite" />
-                </rect>
-
-                {/* Diagonal Caution Hazard Stripe Overlay */}
-                <rect 
-                  x="134" y="70" width="336" height="60" rx="8" 
-                  fill="url(#hazardStripes)" 
-                />
-
-                {/* Pulsing Warning Border Glow */}
-                <rect 
-                  x="136" y="72" width="332" height="56" rx="6" 
-                  fill="none" 
-                  stroke="#F59E0B" 
-                  strokeWidth="1" 
-                  opacity="0.3"
-                >
-                  <animate attributeName="opacity" values="0.15;0.45;0.15" dur="1.8s" repeatCount="indefinite" />
-                </rect>
-
-                {/* Floating Pulsing Pill Tag: "⚡ CLICK TO INSPECT SANCTIONED BLOCK" */}
-                <g transform="translate(302, 54)">
-                  <rect 
-                    x="-135" y="-12" width="270" height="24" rx="12" 
-                    fill="#FFFBEB" 
-                    stroke="#D97706" 
-                    strokeWidth="1.4" 
-                    filter="drop-shadow(0 2px 5px rgba(217, 119, 6, 0.25))"
-                  />
-                  <circle cx="-118" cy="0" r="3.5" fill="#EF4444">
-                    <animate attributeName="r" values="3;5;3" dur="1s" repeatCount="indefinite" />
-                    <animate attributeName="opacity" values="1;0.4;1" dur="1s" repeatCount="indefinite" />
-                  </circle>
-                  <text x="6" y="3.5" textAnchor="middle" className="text-[9px] font-black fill-amber-950 tracking-tight metric-mono">
-                    ⚡ CLICK TO INSPECT SANCTIONED BLOCK
-                  </text>
-                </g>
-              </g>
-
-              {/* LAYER 2: REALISTIC PHYSICAL RAILWAY TRACK BED (Sleepers + Twin Steel Rails) */}
-
-              {/* 1. UP TRACK BED (STA KM 100 to STC KM 140, Centered at Y = 94) */}
-              {/* Concrete Sleeper Ties (height 7px) */}
-              <line x1="70" y1="94" x2="700" y2="94" stroke="#CBD5E1" strokeWidth="7" strokeDasharray="2,4" strokeLinecap="butt" opacity="0.8" />
-              {/* Twin Steel Rails (Top: Y=91.5, Bottom: Y=96.5) */}
-              <line x1="70" y1="91.5" x2="700" y2="91.5" stroke="#2563EB" strokeWidth="1.2" opacity="0.9" strokeLinecap="round" />
-              <line x1="70" y1="96.5" x2="700" y2="96.5" stroke="#2563EB" strokeWidth="1.2" opacity="0.9" strokeLinecap="round" />
-
-              {/* 2. DOWN TRACK BED (STA KM 100 to STC KM 140, Centered at Y = 106) */}
-              {/* Concrete Sleeper Ties (height 7px) */}
-              <line x1="70" y1="106" x2="700" y2="106" stroke="#CBD5E1" strokeWidth="7" strokeDasharray="2,4" strokeLinecap="butt" opacity="0.8" />
-              {/* Twin Steel Rails (Top: Y=103.5, Bottom: Y=108.5) */}
-              <line x1="70" y1="103.5" x2="700" y2="103.5" stroke="#0284C7" strokeWidth="1.2" opacity="0.9" strokeLinecap="round" />
-              <line x1="70" y1="108.5" x2="700" y2="108.5" stroke="#0284C7" strokeWidth="1.2" opacity="0.9" strokeLinecap="round" />
-
-              {/* 3. TURNOUT JUNCTION POINT (STC KM 140: Double Track to Single Line Transition) */}
-              <path d="M 700 94 Q 705 97 710 100" stroke="#DDD6FE" strokeWidth="7" strokeDasharray="2,4" strokeLinecap="butt" opacity="0.8" fill="none" />
-              <path d="M 700 106 Q 705 103 710 100" stroke="#DDD6FE" strokeWidth="7" strokeDasharray="2,4" strokeLinecap="butt" opacity="0.8" fill="none" />
-              <path d="M 700 91.5 Q 705 94.5 710 97.5" stroke="#7C3AED" strokeWidth="1.4" opacity="0.9" fill="none" strokeLinecap="round" />
-              <path d="M 700 108.5 Q 705 105.5 710 102.5" stroke="#7C3AED" strokeWidth="1.4" opacity="0.9" fill="none" strokeLinecap="round" />
-              <line x1="695" y1="94" x2="710" y2="100" stroke="#7C3AED" strokeWidth="1.2" strokeDasharray="3,2" opacity="0.7" />
-              <line x1="695" y1="106" x2="710" y2="100" stroke="#7C3AED" strokeWidth="1.2" strokeDasharray="3,2" opacity="0.7" />
-
-              {/* 4. SINGLE-LINE TRACK BED (SEC C-D, STC KM 140 to STD KM 158, Centered at Y = 100) */}
-              <line x1="710" y1="100" x2="920" y2="100" stroke="#DDD6FE" strokeWidth="7" strokeDasharray="2,4" strokeLinecap="butt" opacity="0.8" />
-              <line x1="710" y1="97.5" x2="920" y2="97.5" stroke="#7C3AED" strokeWidth="1.4" opacity="0.9" strokeLinecap="round" />
-              <line x1="710" y1="102.5" x2="920" y2="102.5" stroke="#7C3AED" strokeWidth="1.4" opacity="0.9" strokeLinecap="round" />
-
-              {/* LAYER 3: SECTION INDICATORS (Y = 142) */}
-              <g transform="translate(230, 142)">
-                <rect x="-65" y="-9" width="130" height="18" rx="4" fill="rgba(239, 246, 255, 0.95)" stroke="#BFDBFE" />
-                <text x="0" y="3.5" textAnchor="middle" className="text-[8.5px] font-extrabold fill-blue-700 metric-mono">
-                  SEC A-B (20 km • Double)
-                </text>
-              </g>
-
-              <g transform="translate(550, 142)">
-                <rect x="-65" y="-9" width="130" height="18" rx="4" fill="rgba(239, 246, 255, 0.95)" stroke="#BFDBFE" />
-                <text x="0" y="3.5" textAnchor="middle" className="text-[8.5px] font-extrabold fill-blue-700 metric-mono">
-                  SEC B-C (20 km • Double)
-                </text>
-              </g>
-
-              <g transform="translate(815, 142)">
-                <rect x="-70" y="-9" width="140" height="18" rx="4" fill="rgba(245, 243, 255, 0.95)" stroke="#DDD6FE" />
-                <text x="0" y="3.5" textAnchor="middle" className="text-[8.5px] font-extrabold fill-purple-700 metric-mono">
-                  SEC C-D (18 km • Single Line)
-                </text>
-              </g>
-
-              {/* REALISTIC TOP-DOWN TRAIN MODELS GLIDING EXACTLY OVER THE TWIN STEEL RAILS */}
-
-              {/* TRAIN 1: Train 12004 Shatabdi Express (UP Track at Y = 94) */}
-              <g 
-                style={{ cursor: 'pointer' }}
-                onMouseEnter={() => setHoveredRadarTrain({
-                  trainNo: '12004',
-                  name: 'New Delhi Shatabdi Express',
-                  priority: 'P1 (Superfast Passenger)',
-                  speed: '110 km/h',
-                  status: 'Running on Time (Estimated Section Position)',
-                  section: 'SEC A-B → SEC B-C (UP Main)',
-                  lineType: 'UP Track (Double Line)'
-                })}
-                onMouseLeave={() => setHoveredRadarTrain(null)}
-              >
-                <animateMotion 
-                  dur="20s" 
-                  repeatCount="indefinite" 
-                  path="M 85 94 L 700 94" 
-                />
-
-                {/* Headlamp Beam glowing forward onto the track */}
-                <polygon points="26,0 52,-7 52,7" fill="url(#shatabdiHeadlamp)" />
-
-                {/* Locomotive WAP-7 Engine (Aerodynamic nose facing right) */}
-                <path d="M 8 -5.5 L 22 -5 Q 26 0 22 5 L 8 5.5 Z" fill="#1D4ED8" stroke="#0F172A" strokeWidth="0.8" />
-                {/* Windshield Cockpit Visor */}
-                <path d="M 18 -3.5 Q 22 0 18 3.5 Z" fill="#0F172A" />
-                {/* Silver/White Center Racing Stripe */}
-                <line x1="8" y1="0" x2="22" y2="0" stroke="#F1F5F9" strokeWidth="1" />
-                {/* Radiator Vents */}
-                <rect x="9.5" y="-3" width="4" height="6" rx="0.5" fill="#1E293B" />
-                <line x1="10.5" y1="-2.5" x2="10.5" y2="2.5" stroke="#64748B" strokeWidth="0.6" />
-                <line x1="12.5" y1="-2.5" x2="12.5" y2="2.5" stroke="#64748B" strokeWidth="0.6" />
-                {/* Dual Roof Pantograph Lines */}
-                <path d="M 15 0 L 16.5 -2.5 L 18 0 L 16.5 2.5 Z" fill="none" stroke="#E2E8F0" strokeWidth="0.8" />
-                <path d="M 10 0 L 11.5 -2.5 L 13 0 L 11.5 2.5 Z" fill="none" stroke="#E2E8F0" strokeWidth="0.8" />
-
-                {/* Coupler 1 */}
-                <rect x="5.5" y="-1" width="3" height="2" rx="0.5" fill="#0F172A" />
-
-                {/* Coupled Bogie Coach 1 (Executive AC Chair Car) */}
-                <rect x="-14" y="-5" width="19.5" height="10" rx="1.5" fill="#1E40AF" stroke="#0F172A" strokeWidth="0.8" />
-                <rect x="-11" y="-2" width="6" height="4" rx="0.5" fill="#E2E8F0" opacity="0.9" />
-                <line x1="-12" y1="-3.6" x2="4" y2="-3.6" stroke="#93C5FD" strokeWidth="0.7" />
-                <line x1="-12" y1="3.6" x2="4" y2="3.6" stroke="#93C5FD" strokeWidth="0.7" />
-
-                {/* Coupler 2 */}
-                <rect x="-17" y="-1" width="3" height="2" rx="0.5" fill="#0F172A" />
-
-                {/* Coupled Bogie Coach 2 (AC Chair Car) */}
-                <rect x="-37" y="-5" width="20" height="10" rx="1.5" fill="#1E40AF" stroke="#0F172A" strokeWidth="0.8" />
-                <rect x="-34" y="-2" width="6" height="4" rx="0.5" fill="#E2E8F0" opacity="0.9" />
-                <line x1="-35" y1="-3.6" x2="-19" y2="-3.6" stroke="#93C5FD" strokeWidth="0.7" />
-                <line x1="-35" y1="3.6" x2="-19" y2="3.6" stroke="#93C5FD" strokeWidth="0.7" />
-
-                {/* Glowing Tail Pulse */}
-                <circle cx="-42" cy="0" r="3.5" fill="#3B82F6" opacity="0.85">
-                  <animate attributeName="r" values="2.5;5;2.5" dur="1.2s" repeatCount="indefinite" />
-                  <animate attributeName="opacity" values="0.9;0.25;0.9" dur="1.2s" repeatCount="indefinite" />
-                </circle>
-
-                {/* Micro Floating Identification Badge (Y - 14 relative to train) */}
-                <g transform="translate(-8, -14)">
-                  <rect x="-16" y="-6.5" width="32" height="13" rx="4" fill="#0F172A" stroke="#3B82F6" strokeWidth="1" filter="drop-shadow(0 1px 2px rgba(0,0,0,0.3))" />
-                  <text x="0" y="2.5" textAnchor="middle" fill="#FFFFFF" fontSize="7.5" fontWeight="800" fontFamily="ui-monospace, monospace">
-                    12004 ▶
-                  </text>
-                </g>
-              </g>
-
-              {/* TRAIN 2: Train 12424 Rajdhani Express (DOWN Track at Y = 106) */}
-              <g 
-                style={{ cursor: 'pointer' }}
-                onMouseEnter={() => setHoveredRadarTrain({
-                  trainNo: '12424',
-                  name: 'Dibrugarh Rajdhani Express',
-                  priority: 'P1 (Superfast Premium)',
-                  speed: '120 km/h',
-                  status: 'Running on Time (Estimated Section Position)',
-                  section: 'SEC B-C → SEC A-B (DOWN Main)',
-                  lineType: 'DOWN Track (Double Line)'
-                })}
-                onMouseLeave={() => setHoveredRadarTrain(null)}
-              >
-                <animateMotion 
-                  dur="24s" 
-                  repeatCount="indefinite" 
-                  path="M 700 106 L 85 106" 
-                />
-
-                {/* Headlamp Beam glowing forward (to the left) onto the track */}
-                <polygon points="-26,0 -52,-7 -52,7" fill="url(#rajdhaniHeadlamp)" />
-
-                {/* Locomotive WAP-7 Engine (Aerodynamic nose facing left) */}
-                <path d="M -8 -5.5 L -22 -5 Q -26 0 -22 5 L -8 5.5 Z" fill="#B91C1C" stroke="#0F172A" strokeWidth="0.8" />
-                {/* Windshield Cockpit Visor */}
-                <path d="M -18 -3.5 Q -22 0 -18 3.5 Z" fill="#0F172A" />
-                {/* Cream/Golden Center Accent Stripe */}
-                <line x1="-8" y1="0" x2="-22" y2="0" stroke="#FEF08A" strokeWidth="1" />
-                {/* Radiator Vents */}
-                <rect x="-13.5" y="-3" width="4" height="6" rx="0.5" fill="#450A0A" />
-                <line x1="-12.5" y1="-2.5" x2="-12.5" y2="2.5" stroke="#991B1B" strokeWidth="0.6" />
-                <line x1="-10.5" y1="-2.5" x2="-10.5" y2="2.5" stroke="#991B1B" strokeWidth="0.6" />
-                {/* Dual Roof Pantograph Lines */}
-                <path d="M -15 0 L -16.5 -2.5 L -18 0 L -16.5 2.5 Z" fill="none" stroke="#FEF08A" strokeWidth="0.8" />
-                <path d="M -10 0 L -11.5 -2.5 L -13 0 L -11.5 2.5 Z" fill="none" stroke="#FEF08A" strokeWidth="0.8" />
-
-                {/* Coupler 1 */}
-                <rect x="-8.5" y="-1" width="3" height="2" rx="0.5" fill="#0F172A" />
-
-                {/* Coupled Bogie Coach 1 (AC First / 2-Tier LHB Coach in Red & Cream) */}
-                <rect x="-5.5" y="-5" width="19.5" height="10" rx="1.5" fill="#991B1B" stroke="#0F172A" strokeWidth="0.8" />
-                <rect x="-2" y="-2" width="6" height="4" rx="0.5" fill="#FEF08A" opacity="0.9" />
-                <line x1="-4" y1="-3.6" x2="12" y2="-3.6" stroke="#FEF08A" strokeWidth="0.7" />
-                <line x1="-4" y1="3.6" x2="12" y2="3.6" stroke="#FEF08A" strokeWidth="0.7" />
-
-                {/* Coupler 2 */}
-                <rect x="14" y="-1" width="3" height="2" rx="0.5" fill="#0F172A" />
-
-                {/* Coupled Bogie Coach 2 (AC 3-Tier LHB Coach) */}
-                <rect x="17" y="-5" width="20" height="10" rx="1.5" fill="#991B1B" stroke="#0F172A" strokeWidth="0.8" />
-                <rect x="23" y="-2" width="6" height="4" rx="0.5" fill="#FEF08A" opacity="0.9" />
-                <line x1="18.5" y1="-3.6" x2="35" y2="-3.6" stroke="#FEF08A" strokeWidth="0.7" />
-                <line x1="18.5" y1="3.6" x2="35" y2="3.6" stroke="#FEF08A" strokeWidth="0.7" />
-
-                {/* Glowing Tail Pulse */}
-                <circle cx="42" cy="0" r="3.5" fill="#EF4444" opacity="0.85">
-                  <animate attributeName="r" values="2.5;5;2.5" dur="1.2s" repeatCount="indefinite" />
-                  <animate attributeName="opacity" values="0.9;0.25;0.9" dur="1.2s" repeatCount="indefinite" />
-                </circle>
-
-                {/* Micro Floating Identification Badge (Y - 14 relative to train) */}
-                <g transform="translate(8, -14)">
-                  <rect x="-16" y="-6.5" width="32" height="13" rx="4" fill="#0F172A" stroke="#EF4444" strokeWidth="1" filter="drop-shadow(0 1px 2px rgba(0,0,0,0.3))" />
-                  <text x="0" y="2.5" textAnchor="middle" fill="#FFFFFF" fontSize="7.5" fontWeight="800" fontFamily="ui-monospace, monospace">
-                    ◀ 12424
-                  </text>
-                </g>
-              </g>
-
-              {/* TRAIN 3: Goods BCN-91021 (Single Line SEC C-D at Y = 100) */}
-              <g 
-                style={{ cursor: 'pointer' }}
-                onMouseEnter={() => setHoveredRadarTrain({
-                  trainNo: 'BCN-91021',
-                  name: 'Goods Freight (BCN Rake)',
-                  priority: 'P4 (Freight Goods Transit)',
-                  speed: '52 km/h',
-                  status: 'Running on Time (Estimated Section Position)',
-                  section: 'SEC C-D (Single Line Bi-directional Corridor)',
-                  lineType: 'Single Bi-directional Track (Token Protected)'
-                })}
-                onMouseLeave={() => setHoveredRadarTrain(null)}
-              >
-                {/* Single line clearance motion: Moves C->D, pauses at D for clearance verification, moves back, pauses */}
-                <animateMotion 
-                  dur="22s" 
-                  repeatCount="indefinite" 
-                  path="M 725 100 L 905 100 L 905 100 L 725 100" 
-                  keyPoints="0;1;1;0" 
-                  keyTimes="0;0.44;0.56;1" 
-                  calcMode="linear" 
-                />
-
-                {/* Headlamp Beam */}
-                <polygon points="24,0 48,-7 48,7" fill="url(#freightHeadlamp)" />
-
-                {/* Heavy Electric Freight Loco (WAG-9 Style) */}
-                <rect x="8" y="-5.5" width="16" height="11" rx="1.5" fill="#1E3A8A" stroke="#0F172A" strokeWidth="0.8" />
-                {/* High-visibility Orange Warning Chevron Accents */}
-                <line x1="20" y1="-5.5" x2="23.5" y2="-1.5" stroke="#F97316" strokeWidth="1.2" />
-                <line x1="20" y1="5.5" x2="23.5" y2="1.5" stroke="#F97316" strokeWidth="1.2" />
-                {/* Twin Heavy Pantographs */}
-                <path d="M 11 0 L 12.5 -2.5 L 14 0 L 12.5 2.5 Z" fill="none" stroke="#F97316" strokeWidth="0.8" />
-                <path d="M 17 0 L 18.5 -2.5 L 20 0 L 18.5 2.5 Z" fill="none" stroke="#F97316" strokeWidth="0.8" />
-
-                {/* Coupler 1 */}
-                <rect x="5" y="-1.2" width="3" height="2.4" rx="0.5" fill="#0F172A" />
-
-                {/* Freight Container Wagon 1 (BCN Covered Wagon) */}
-                <rect x="-15" y="-5.5" width="20" height="11" rx="1" fill="#475569" stroke="#0F172A" strokeWidth="0.8" />
-                <line x1="-12" y1="-3.5" x2="-12" y2="3.5" stroke="#334155" strokeWidth="1" />
-                <line x1="-5" y1="-3.5" x2="-5" y2="3.5" stroke="#334155" strokeWidth="1" />
-                <line x1="2" y1="-3.5" x2="2" y2="3.5" stroke="#334155" strokeWidth="1" />
-                <rect x="-14" y="-5" width="2" height="2" fill="#F97316" />
-                <rect x="2" y="-5" width="2" height="2" fill="#F97316" />
-
-                {/* Coupler 2 */}
-                <rect x="-18" y="-1.2" width="3" height="2.4" rx="0.5" fill="#0F172A" />
-
-                {/* Freight Container Wagon 2 (BCN Covered Wagon) */}
-                <rect x="-38" y="-5.5" width="20" height="11" rx="1" fill="#334155" stroke="#0F172A" strokeWidth="0.8" />
-                <line x1="-35" y1="-3.5" x2="-35" y2="3.5" stroke="#1E293B" strokeWidth="1" />
-                <line x1="-28" y1="-3.5" x2="-28" y2="3.5" stroke="#1E293B" strokeWidth="1" />
-                <line x1="-21" y1="-3.5" x2="-21" y2="3.5" stroke="#1E293B" strokeWidth="1" />
-                <rect x="-37" y="-5" width="2" height="2" fill="#F97316" />
-                <rect x="-21" y="-5" width="2" height="2" fill="#F97316" />
-
-                {/* Glowing Tail Pulse */}
-                <circle cx="-42" cy="0" r="3" fill="#F97316" opacity="0.85">
-                  <animate attributeName="r" values="2;4.5;2" dur="1s" repeatCount="indefinite" />
-                  <animate attributeName="opacity" values="0.9;0.25;0.9" dur="1s" repeatCount="indefinite" />
-                </circle>
-
-                {/* Micro Floating Identification Badge (Y - 14 relative to train) */}
-                <g transform="translate(-10, -14)">
-                  <rect x="-18" y="-6.5" width="36" height="13" rx="4" fill="#0F172A" stroke="#F97316" strokeWidth="1" filter="drop-shadow(0 1px 2px rgba(0,0,0,0.3))" />
-                  <text x="0" y="2.5" textAnchor="middle" fill="#FFEDD5" fontSize="7" fontWeight="800" fontFamily="ui-monospace, monospace">
-                    BCN-91
-                  </text>
-                </g>
-              </g>
-
-              {/* LAYER 4: STATION NODES & LABELS WITH AMPLE BREATHING SPACE (Y = 116 to 212) */}
-
-              {/* Thin Vertical Dashed Connector Lines: runs from Y = 116 down to Y = 165 */}
-              <line x1="70" y1="116" x2="70" y2="165" stroke="#94A3B8" strokeWidth="1.5" strokeDasharray="2,2" opacity="0.7" />
-              <line x1="390" y1="116" x2="390" y2="165" stroke="#94A3B8" strokeWidth="1.5" strokeDasharray="2,2" opacity="0.7" />
-              <line x1="710" y1="116" x2="710" y2="165" stroke="#94A3B8" strokeWidth="1.5" strokeDasharray="2,2" opacity="0.7" />
-              <line x1="920" y1="116" x2="920" y2="165" stroke="#94A3B8" strokeWidth="1.5" strokeDasharray="2,2" opacity="0.7" />
-
-              {/* STA (Anandpur - KM 100.0, Node at Y = 170) */}
-              <g 
-                className="cursor-pointer"
-                onMouseEnter={() => setHoveredStation({
-                  code: 'STA',
-                  name: 'Anandpur Junction',
-                  km: 'KM 100.0',
-                  platforms: 4,
-                  interlocking: 'Electronic Interlocking (EI) · Dual Aspect Route Relay',
-                  type: 'Origin / Transit Hub · 4 Platforms · Double Track'
-                })}
-                onMouseLeave={() => setHoveredStation(null)}
-              >
-                <circle cx="70" cy="170" r="18" fill="transparent" />
-                <circle cx="70" cy="170" r="10" fill="#FFFFFF" stroke="#0F172A" strokeWidth="3" filter="drop-shadow(0 1px 3px rgba(0,0,0,0.1))" />
-                <circle cx="70" cy="170" r="4" fill="#2563EB" />
-                <text x="70" y="196" textAnchor="middle" fontSize="13" fontWeight="700" fill="#0F172A">
-                  STA (Anandpur)
-                </text>
-                <text x="70" y="212" textAnchor="middle" fontSize="11" fontWeight="500" fill="#64748B" className="metric-mono">
-                  KM 100.0 • 4 PF
-                </text>
-              </g>
-
-              {/* STB (Bilaspur Jn - KM 120.0, Node at Y = 170) */}
-              <g 
-                className="cursor-pointer"
-                onMouseEnter={() => setHoveredStation({
-                  code: 'STB',
-                  name: 'Bilaspur Junction',
-                  km: 'KM 120.0',
-                  platforms: 6,
-                  interlocking: 'Panel Interlocking (PI) · Route Relay Interlocking Active',
-                  type: 'Major Junction · 6 Platforms · Double Track Main + 2 Loops'
-                })}
-                onMouseLeave={() => setHoveredStation(null)}
-              >
-                <circle cx="390" cy="170" r="18" fill="transparent" />
-                <circle cx="390" cy="170" r="10" fill="#FFFFFF" stroke="#0F172A" strokeWidth="3" filter="drop-shadow(0 1px 3px rgba(0,0,0,0.1))" />
-                <circle cx="390" cy="170" r="4" fill="#2563EB" />
-                <text x="390" y="196" textAnchor="middle" fontSize="13" fontWeight="700" fill="#0F172A">
-                  STB (Bilaspur Jn)
-                </text>
-                <text x="390" y="212" textAnchor="middle" fontSize="11" fontWeight="500" fill="#64748B" className="metric-mono">
-                  KM 120.0 • 6 PF
-                </text>
-              </g>
-
-              {/* STC (Chanderi - KM 140.0, Node at Y = 170) */}
-              <g 
-                className="cursor-pointer"
-                onMouseEnter={() => setHoveredStation({
-                  code: 'STC',
-                  name: 'Chanderi',
-                  km: 'KM 140.0',
-                  platforms: 3,
-                  interlocking: 'Electronic Interlocking (EI) · Single-Line Tokenless Block Instrument',
-                  type: 'Transition Junction · Double Track to Single Track Gateway'
-                })}
-                onMouseLeave={() => setHoveredStation(null)}
-              >
-                <circle cx="710" cy="170" r="18" fill="transparent" />
-                <circle cx="710" cy="170" r="10" fill="#FFFFFF" stroke="#0F172A" strokeWidth="3" filter="drop-shadow(0 1px 3px rgba(0,0,0,0.1))" />
-                <circle cx="710" cy="170" r="4" fill="#7C3AED" />
-                <text x="710" y="196" textAnchor="middle" fontSize="13" fontWeight="700" fill="#0F172A">
-                  STC (Chanderi)
-                </text>
-                <text x="710" y="212" textAnchor="middle" fontSize="11" fontWeight="500" fill="#64748B" className="metric-mono">
-                  KM 140.0 • 3 PF
-                </text>
-              </g>
-
-              {/* STD (Devgarh - KM 158.0, Node at Y = 170) */}
-              <g 
-                className="cursor-pointer"
-                onMouseEnter={() => setHoveredStation({
-                  code: 'STD',
-                  name: 'Devgarh',
-                  km: 'KM 158.0',
-                  platforms: 2,
-                  interlocking: 'Mechanical Key Interlocking · Central Lock Block Terminal',
-                  type: 'Terminal Station · Single Bi-directional Loop · 2 Platforms'
-                })}
-                onMouseLeave={() => setHoveredStation(null)}
-              >
-                <circle cx="920" cy="170" r="18" fill="transparent" />
-                <circle cx="920" cy="170" r="10" fill="#FFFFFF" stroke="#0F172A" strokeWidth="3" filter="drop-shadow(0 1px 3px rgba(0,0,0,0.1))" />
-                <circle cx="920" cy="170" r="4" fill="#7C3AED" />
-                <text x="920" y="196" textAnchor="middle" fontSize="13" fontWeight="700" fill="#0F172A">
-                  STD (Devgarh)
-                </text>
-                <text x="920" y="212" textAnchor="middle" fontSize="11" fontWeight="500" fill="#64748B" className="metric-mono">
-                  KM 158.0 • 2 PF
-                </text>
-              </g>
-            </svg>
-          </div>
-
-          {/* 5. INTERACTIVE GLASS TELEMETRY POPOVER / READOUT BAR */}
-          <div className="mt-3">
-            {hoveredStation ? (
-              <div className="bg-white/95 backdrop-blur-md p-3.5 rounded-xl border border-blue-200 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3 animate-in fade-in duration-200">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700 font-black text-xs">
-                    {hoveredStation.code}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-slate-900">{hoveredStation.name}</span>
-                      <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-                        {hoveredStation.km}
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
-                        {hoveredStation.platforms} Platforms
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-500 font-medium mt-0.5">
-                      {hoveredStation.type}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 text-[10px] bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200/80">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="font-bold text-slate-700">Interlocking:</span>
-                  <span className="font-semibold text-slate-900">{hoveredStation.interlocking}</span>
-                </div>
-              </div>
-            ) : hoveredRadarTrain ? (
-              <div className="bg-white/95 backdrop-blur-md p-3.5 rounded-xl border border-emerald-200 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3 animate-in fade-in duration-200">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 font-black text-xs">
-                    <Train className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-slate-900">
-                        Train {hoveredRadarTrain.trainNo} · {hoveredRadarTrain.name}
-                      </span>
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                        {hoveredRadarTrain.priority}
-                      </span>
-                      <span className="text-[10px] font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-                        {hoveredRadarTrain.speed}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-500 font-medium mt-0.5 flex items-center gap-2">
-                      <span>Line: {hoveredRadarTrain.lineType}</span>
-                      <span>•</span>
-                      <span>Section: {hoveredRadarTrain.section}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 text-[10px] bg-emerald-50 text-emerald-900 px-3 py-1.5 rounded-lg border border-emerald-200 font-bold">
-                  <div className="w-2 h-2 rounded-full bg-emerald-600 animate-ping"></div>
-                  <span>{hoveredRadarTrain.status}</span>
-                </div>
-              </div>
-            ) : hoveredWorkZone ? (
-              <div className="bg-amber-50/95 backdrop-blur-md p-3.5 rounded-xl border border-amber-300 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3 animate-in fade-in duration-200">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-amber-200/80 flex items-center justify-center text-amber-900 font-black text-xs">
-                    <Wrench className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-amber-950">Active Joint Block Containment Zone</span>
-                      <span className="text-[10px] font-extrabold text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-md">
-                        KM 104.00 – KM 125.00 (21 km)
-                      </span>
-                      <span className="text-[10px] font-black text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
-                        TSR 30 Caution Active
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-amber-800 font-medium mt-0.5">
-                      Coordinated Maintenance Window: Track Machine Tamper (ENG) + TRD OHE Power Block + S&amp;T Cable Relay
-                    </div>
-                  </div>
-                </div>
-                <div className="text-[10px] text-amber-900 bg-white/80 px-3 py-1.5 rounded-lg border border-amber-300 font-bold">
-                  Signal Interlock: Section Block Absolute Protection Active
-                </div>
-              </div>
-            ) : (
-              <div className="bg-white/80 p-3 rounded-xl border border-slate-200/80 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[10px] text-slate-500">
-                <div className="flex items-center gap-3 font-semibold text-slate-600">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Radar Tracking Active (3 live targets)
-                  </span>
-                  <span>•</span>
-                  <span>Single-Line Clearance Guard (SEC C-D)</span>
-                  <span>•</span>
-                  <span>Auto-Interlocking Validated</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-slate-400 font-medium">
-                  <span>💡 Hover over station nodes, moving trains, or work zone for telemetry readout</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
 
         {/* MODAL / GLASS INSPECTION DRAWER FOR SANCTIONED JOINT BLOCK */}
         {isBlockDetailOpen && (
@@ -2174,7 +1368,7 @@ export const CommandCenter: React.FC = () => {
                         KM 104.2 to KM 124.8
                       </div>
                       <div className="text-[11px] font-semibold text-slate-600 mt-0.5">
-                        Section A-B (UP Track • Anandpur – Bilaspur)
+                        SEC GZB–ANVR (UP Track • Ghaziabad – Anand Vihar)
                       </div>
                     </div>
                   </div>
@@ -2334,18 +1528,14 @@ export const CommandCenter: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: TRAIN TRAJECTORIES & MAREY GRAPH                                   */}
+      {/* ========================================================================= */}
+      {/* TAB 2: CORRIDOR OCCUPANCY & MAREY GRAPH                                   */}
       {/* ========================================================================= */}
       {commandTab === 'MAREY' && (
         <div className="space-y-6">
-          {/* 5. HERO TIME-DISTANCE MAREY TRAIN GRAPH */}
-          <MareyChart 
-            trains={trains}
-            corridor={corridor}
-            activePlanType={activePlanType}
-            onPlanTypeChange={(type) => setActivePlanType(type)}
-            newPlanACost={newPlanACost}
-            planBCost={planBCost}
+          <OccupancyView 
+            initialPlanMode={activePlanType}
+            onPlanModeChange={(mode) => setActivePlanType(mode)}
           />
         </div>
       )}

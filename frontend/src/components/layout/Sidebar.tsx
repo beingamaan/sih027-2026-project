@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
-  LayoutDashboard,
   Activity, 
   Users,
   Wrench,
@@ -13,7 +12,13 @@ import {
   ListTodo,
   CalendarClock,
   FileSpreadsheet,
+  FileCheck,
+  FileText,
+  LayoutDashboard,
+  Sliders,
+  Layers,
   ShieldAlert,
+  ShieldCheck,
   BarChart3,
   Archive,
   PanelLeftClose,
@@ -163,12 +168,6 @@ export const Sidebar: React.FC = () => {
       case 'SECTION_CONTROLLER':
         return [
           {
-            group: 'PRIMARY',
-            items: [
-              { name: 'Dashboard', path: '/command', icon: LayoutDashboard }
-            ]
-          },
-          {
             group: 'OPERATIONS',
             items: [
               { name: 'Command Center', path: '/command', icon: Activity }
@@ -187,16 +186,18 @@ export const Sidebar: React.FC = () => {
       case 'DEPT_SUPERVISOR':
         return [
           {
-            group: 'PRIMARY',
+            group: 'OPERATIONS',
             items: [
-              { name: 'Department Workspace', path: '/department', icon: LayoutDashboard }
+              { name: 'Department Overview', path: '/department', icon: LayoutDashboard },
+              { name: 'Horizons & Quotas', path: '/department?tab=horizons', icon: CalendarDays },
+              { name: 'Readiness Board', path: '/department?tab=readiness', icon: Sliders },
+              { name: 'Assigned Blocks (Co-Block)', path: '/department?tab=assigned', icon: Layers }
             ]
           },
           {
-            group: 'OPERATIONS',
+            group: 'TASK MANAGEMENT',
             items: [
-              { name: 'Department Workspace', path: '/department', icon: Users },
-              { name: 'Task Register', path: '/tasks', icon: ListTodo }
+              { name: 'Task Register (413)', path: '/tasks', icon: FileText }
             ]
           }
         ];
@@ -226,15 +227,15 @@ export const Sidebar: React.FC = () => {
           {
             group: 'GOVERNANCE',
             items: [
-              { name: 'Governance & Audit', path: '/governance', icon: FileSpreadsheet },
-              { name: 'Sanction & Overrides', path: '/governance', icon: ShieldAlert }
+              { name: 'Governance & Audit', path: '/governance', icon: FileCheck },
+              { name: 'Sanction & Overrides', path: '/governance?tab=sanctions', icon: ShieldCheck }
             ]
           },
           {
-            group: 'REPORTS',
+            group: 'REPORTS & ANALYTICS',
             items: [
-              { name: 'Reports & Insights', path: '/audit', icon: BarChart3 },
-              { name: 'Data Archive', path: '/audit', icon: Archive }
+              { name: 'Reports & Insights', path: '/reports', icon: BarChart3 },
+              { name: 'Data Archive', path: '/archive', icon: Archive }
             ]
           }
         ];
@@ -244,19 +245,14 @@ export const Sidebar: React.FC = () => {
           {
             group: 'OPERATIONS',
             items: [
-              { name: 'Station Awareness', path: '/station', icon: Radio }
+              { name: 'Station Awareness', path: '/station', icon: Radio },
+              { name: 'G&SR Memo Register', path: '/station/memos', icon: FileCheck }
             ]
           }
         ];
 
       default:
         return [
-          {
-            group: 'PRIMARY',
-            items: [
-              { name: 'Dashboard', path: '/command', icon: LayoutDashboard }
-            ]
-          },
           {
             group: 'OPERATIONS',
             items: [
@@ -267,16 +263,73 @@ export const Sidebar: React.FC = () => {
     }
   };
 
-  const navigationGroups = getRoleNavigationGroups(activeRole);
+  let effectiveRole = activeRole;
+  if (location.pathname.startsWith('/department')) {
+    effectiveRole = 'DEPT_SUPERVISOR';
+  } else if (location.pathname.startsWith('/governance') || location.pathname === '/reports' || location.pathname === '/archive') {
+    effectiveRole = 'DIVISIONAL_OFFICER';
+  }
+  const navigationGroups = getRoleNavigationGroups(effectiveRole);
+
+  const getProfileDisplay = () => {
+    if (activeRole === 'STATION_MASTER') {
+      return {
+        name: 'M. K. Gupta',
+        title: 'Station Master · GZB (Ghaziabad)',
+        status: 'Station Control Active'
+      };
+    }
+    if (activeRole === 'SECTION_CONTROLLER') {
+      return {
+        name: 'R. K. Sharma',
+        title: 'Section Controller · Delhi (DLI)',
+        status: 'Section Control Active'
+      };
+    }
+    if (activeRole === 'DEPT_SUPERVISOR') {
+      return {
+        name: 'A. K. Verma',
+        title: 'DEPT SUPERVISOR · P.WAY (ENG)',
+        status: 'Department Control Active'
+      };
+    }
+    if (activeRole === 'FIELD_EXEC_LEAD') {
+      return {
+        name: 'V. K. Meena',
+        title: 'Field Lead · BLK-2026',
+        status: 'Field Operations Active'
+      };
+    }
+    if (activeRole === 'FIELD_INSPECTOR') {
+      return {
+        name: 'R. P. Singh',
+        title: 'Track Inspector · DLI Division',
+        status: 'Track Inspection Active'
+      };
+    }
+    if (activeRole === 'DIVISIONAL_OFFICER' || effectiveRole === 'DIVISIONAL_OFFICER') {
+      return {
+        name: 'Dr. S. Mukherjee',
+        title: 'Sr. DOM · Review & Sanction',
+        status: 'Governance Active'
+      };
+    }
+    return {
+      name: currentProfile.name ? currentProfile.name.split(',')[0] : 'Railway Officer',
+      title: currentProfile.title || currentProfile.roleBadge,
+      status: 'System Active'
+    };
+  };
+
+  const profileDisplay = getProfileDisplay();
 
   return (
     <aside 
-      style={{ backgroundColor: '#102A43' }}
-      className={`text-slate-200 flex flex-col h-screen fixed top-0 left-0 border-r border-[#1B3C5E] z-40 shadow-xl transition-all duration-300 ease-in-out select-none justify-between overflow-hidden ${
+      className={`h-screen sticky top-0 flex flex-col justify-between bg-[#102A43] text-white border-r border-slate-800 z-30 select-none overflow-y-auto transition-all duration-300 ease-in-out shrink-0 ${
         isCollapsed ? 'w-20' : 'w-[260px]'
       }`}
     >
-      {/* 1. TOP HEADER */}
+      {/* Brand Header */}
       <div 
         className={`h-20 shrink-0 border-b border-[#1B3C5E]/80 flex items-center transition-all duration-300 ${
           isCollapsed ? 'px-2 justify-center gap-1.5' : 'px-4 justify-between'
@@ -284,7 +337,9 @@ export const Sidebar: React.FC = () => {
       >
         {isCollapsed ? (
           <div className="flex flex-col items-center justify-center gap-2">
-            <IndianRailwaysCrestSVG size={36} />
+            <div className="relative flex items-center justify-center w-10 h-10 rounded-full overflow-hidden shrink-0 border border-white/20 bg-white shadow-sm">
+              <img src="/ir_logo.png" alt="Indian Railways Crest" className="w-full h-full object-cover rounded-full" />
+            </div>
             <button
               onClick={toggleSidebar}
               title="Expand sidebar"
@@ -297,13 +352,15 @@ export const Sidebar: React.FC = () => {
         ) : (
           <>
             <div className="flex items-center gap-3 overflow-hidden">
-              <IndianRailwaysCrestSVG size={42} />
+              <div className="relative flex items-center justify-center w-11 h-11 rounded-full overflow-hidden shrink-0 border border-white/20 bg-white shadow-sm">
+                <img src="/ir_logo.png" alt="Indian Railways Crest" className="w-full h-full object-cover rounded-full" />
+              </div>
               <div className="min-w-0">
-                <h1 className="text-sm font-black tracking-wider text-white truncate font-sans leading-tight">
+                <h1 className="font-bold tracking-wide text-white text-sm truncate font-sans leading-tight">
                   INDIAN RAILWAYS
                 </h1>
                 <p className="text-[10.5px] text-amber-200/90 font-semibold tracking-wide truncate mt-0.5">
-                  Ministry of Railways
+                  Ministry of Railways · Government of India
                 </p>
                 <p className="text-slate-400 text-[10px] tracking-wider truncate">
                   People • Progress • Possibilities
@@ -322,8 +379,8 @@ export const Sidebar: React.FC = () => {
         )}
       </div>
 
-      {/* 2. GROUPED NAVIGATION SECTIONS */}
-      <nav className="flex-1 py-3 px-2.5 space-y-4 overflow-y-auto overflow-x-hidden min-h-0 custom-scrollbar">
+      {/* Navigation Links */}
+      <nav className="flex-1 py-2 px-2.5 space-y-3 overflow-y-auto overflow-x-hidden min-h-0 custom-scrollbar">
         {navigationGroups.map((grp) => (
           <div key={grp.group} className="space-y-1">
             {!isCollapsed && (
@@ -334,20 +391,31 @@ export const Sidebar: React.FC = () => {
 
             {grp.items.map((item, itemIdx) => {
               const Icon = item.icon;
-              // Precise active matching preventing dual-highlights
-              let isActive = location.pathname === item.path;
-              if (item.path === '/command') {
+              const searchParams = new URLSearchParams(location.search);
+              const currentTab = searchParams.get('tab');
+              const currentFullPath = location.pathname + location.search;
+
+              let isActive = false;
+              if (item.path === '/governance') {
+                isActive = location.pathname === '/governance' && (!currentTab || currentTab === '');
+              } else if (item.path === '/governance?tab=sanctions') {
+                isActive = location.pathname === '/governance' && currentTab === 'sanctions';
+              } else if (item.path === '/department') {
+                isActive = location.pathname === '/department' && (!currentTab || currentTab === '' || currentTab === 'overview');
+              } else if (item.path.startsWith('/department?tab=')) {
+                isActive = currentFullPath === item.path;
+              } else if (item.path === '/reports') {
+                isActive = location.pathname === '/reports';
+              } else if (item.path === '/archive') {
+                isActive = location.pathname === '/archive';
+              } else if (item.path === '/command') {
                 if (grp.group === 'PRIMARY' && item.name === 'Dashboard') {
                   isActive = location.pathname === '/dashboard';
                 } else if (item.name === 'Command Center') {
                   isActive = location.pathname === '/command' || location.pathname === '/';
                 }
-              } else if (item.path === '/department') {
-                if (grp.group === 'PRIMARY') {
-                  isActive = false;
-                } else {
-                  isActive = location.pathname === '/department';
-                }
+              } else {
+                isActive = location.pathname === item.path;
               }
 
               if (isCollapsed) {
@@ -394,119 +462,97 @@ export const Sidebar: React.FC = () => {
         ))}
       </nav>
 
-      {/* 3. SIDEBAR FOOTER (Statically anchored at bottom without overlapping list) */}
-      <div className="shrink-0 border-t border-[#1B3C5E] bg-[#0A1C2E]">
-        {/* Subtle Watermark Track & Architectural Silhouette */}
+      {/* Bottom Pinned Zone: Heritage Illustration directly flush above user card */}
+      <div className="mt-auto w-full shrink-0 flex flex-col">
+        {/* Heritage Illustration directly flush above user card */}
         {!isCollapsed && (
-          <div className="px-4 pt-2.5 pb-1 border-b border-[#1B3C5E]/50 relative overflow-hidden">
-            {/* Background railway track & heritage facade SVG watermark */}
-            <svg 
-              className="absolute right-0 bottom-0 opacity-10 pointer-events-none" 
-              width="140" 
-              height="50" 
-              viewBox="0 0 160 50" 
-              fill="none"
-            >
-              <path d="M 10 40 L 10 25 L 18 15 L 26 25 L 26 40 Z" fill="#FFFFFF" />
-              <path d="M 32 40 L 32 20 Q 45 6 58 20 L 58 40 Z" fill="#FFFFFF" />
-              <path d="M 45 6 L 45 0" stroke="#FFFFFF" strokeWidth="1.5" />
-              <path d="M 64 40 L 64 26 L 72 17 L 80 26 L 80 40 Z" fill="#FFFFFF" />
-              <path d="M 86 40 L 86 16 Q 105 2 124 16 L 124 40 Z" fill="#FFFFFF" />
-              <path d="M 105 2 L 105 -3" stroke="#FFFFFF" strokeWidth="1.5" />
-              <line x1="0" y1="42" x2="160" y2="42" stroke="#FFFFFF" strokeWidth="2" />
-              <line x1="0" y1="48" x2="160" y2="48" stroke="#FFFFFF" strokeWidth="2" />
-              {Array.from({ length: 16 }).map((_, i) => (
-                <line key={i} x1={i * 10} y1="39" x2={i * 10} y2="50" stroke="#FFFFFF" strokeWidth="2" />
-              ))}
-            </svg>
-            <p className="text-[10px] font-bold uppercase text-amber-300/80 tracking-widest relative z-10">
-              BUILDING A STRONGER TOMORROW
-            </p>
-            <p className="text-[9px] text-[#718096] font-medium mt-0.5 truncate">
-              Viksit Bharat · Dedicated Corridor
-            </p>
+          <div className="relative w-full overflow-hidden border-b border-slate-700/50 block select-none pointer-events-none">
+            <img
+              src="/sidebar_heritage.png"
+              alt="Heritage Architecture"
+              className="w-full h-auto max-h-[105px] object-cover object-bottom block"
+            />
+            <div className="absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-[#102A43] to-transparent" />
           </div>
         )}
 
-        {/* User Profile Card */}
-        <div className="p-2.5">
-          {isCollapsed ? (
-            <div className="flex flex-col items-center gap-2">
-              <div 
-                className="w-10 h-10 rounded-lg bg-[#9E1B28] text-white flex items-center justify-center font-black text-xs shadow-md cursor-pointer group relative"
-                title={`${currentProfile.name} | ${currentProfile.title}`}
-              >
-                {currentProfile.avatarInitials}
-                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[#0A1C2E]"></span>
-              </div>
-              <button
-                onClick={toggleSidebar}
-                title="Expand sidebar"
-                aria-label="Expand sidebar"
-                className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-              >
-                <PanelLeftOpen size={15} />
-              </button>
+        {/* Pinned User Profile Card */}
+        <div className="p-3 bg-[#0C2138] border-t border-slate-700/40">
+        {isCollapsed ? (
+          <div className="flex flex-col items-center gap-2">
+            <div 
+              className="w-10 h-10 rounded-lg bg-[#9E1B28] text-white flex items-center justify-center font-black text-xs shadow-md cursor-pointer group relative"
+              title={`${profileDisplay.name} | ${profileDisplay.title}`}
+            >
+              {currentProfile.avatarInitials}
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[#0C2138]"></span>
             </div>
-          ) : (
-            <div>
-              <div 
-                onClick={() => setProfileExpanded(!profileExpanded)}
-                className="p-2 rounded-lg bg-[#071A2F]/90 border border-[#1C3D5A] hover:border-[#2B547E] cursor-pointer transition-colors"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-md bg-[#9E1B28] text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs relative">
-                      {currentProfile.avatarInitials}
-                      <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-[#071A2F]"></span>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-white truncate leading-tight">
-                        {currentProfile.name}
-                      </p>
-                      <p className="text-[10px] text-[#A0AEC0] truncate mt-0.5 flex items-center gap-1 font-mono">
-                        {currentProfile.roleBadge}
-                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                      </p>
-                    </div>
+            <button
+              onClick={toggleSidebar}
+              title="Expand sidebar"
+              aria-label="Expand sidebar"
+              className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <PanelLeftOpen size={15} />
+            </button>
+          </div>
+        ) : (
+          <div>
+            <div 
+              onClick={() => setProfileExpanded(!profileExpanded)}
+              className="p-2 rounded-lg bg-[#071A2F]/90 border border-[#1C3D5A] hover:border-[#2B547E] cursor-pointer transition-colors"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <div className="w-8 h-8 rounded-md bg-[#9E1B28] text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs relative">
+                    {currentProfile.avatarInitials}
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-[#071A2F]"></span>
                   </div>
-                  {profileExpanded ? (
-                    <ChevronDown size={14} className="text-[#A0AEC0] shrink-0" />
-                  ) : (
-                    <ChevronRight size={14} className="text-[#A0AEC0] shrink-0" />
-                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-white tracking-wide truncate">{profileDisplay.name}</p>
+                    <p className="text-[11px] font-medium text-slate-300 leading-tight">{profileDisplay.title}</p>
+                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-mono mt-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> {profileDisplay.status}
+                    </span>
+                  </div>
                 </div>
-
-                {profileExpanded && (
-                  <div className="mt-2 pt-2 border-t border-[#1C3D5A] text-[10px] text-[#A0AEC0] space-y-1 animate-in fade-in duration-150">
-                    <div className="flex justify-between">
-                      <span>Department:</span>
-                      <span className="text-white font-bold">{currentProfile.department}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Division:</span>
-                      <span className="text-white font-bold">Delhi (DLI)</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Status:</span>
-                      <span className="text-emerald-400 font-bold flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Online
-                      </span>
-                    </div>
-                  </div>
+                {profileExpanded ? (
+                  <ChevronDown size={14} className="text-[#A0AEC0] shrink-0" />
+                ) : (
+                  <ChevronRight size={14} className="text-[#A0AEC0] shrink-0" />
                 )}
               </div>
 
-              {/* Bottom Collapse Toggle [<< Collapse] */}
-              <button
-                onClick={toggleSidebar}
-                className="w-full mt-2 py-1 px-3 rounded-lg text-[11px] font-semibold text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-[#1B3C5E]"
-              >
-                <PanelLeftClose size={13} />
-                <span>« Collapse</span>
-              </button>
+              {profileExpanded && (
+                <div className="mt-2 pt-2 border-t border-[#1C3D5A] text-[10px] text-[#A0AEC0] space-y-1 animate-in fade-in duration-150">
+                  <div className="flex justify-between">
+                    <span>Department:</span>
+                    <span className="text-white font-bold">{currentProfile.department}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Division:</span>
+                    <span className="text-white font-bold">Delhi (DLI)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Status:</span>
+                    <span className="text-emerald-400 font-bold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Online
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+
+            {/* Bottom Collapse Toggle [<< Collapse] */}
+            <button
+              onClick={toggleSidebar}
+              className="w-full mt-2 py-1 px-3 rounded-lg text-[11px] font-semibold text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-[#1B3C5E]"
+            >
+              <PanelLeftClose size={13} />
+              <span>« Collapse</span>
+            </button>
+          </div>
+        )}
         </div>
       </div>
     </aside>

@@ -1,40 +1,39 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { SidebarProvider, useSidebar } from './components/layout/Sidebar';
 import { AuthProvider, useAuth, RailwayRole } from './context/AuthContext';
 import { CommandCenter } from './pages/CommandCenter';
 import { DepartmentWorkspace } from './pages/DepartmentWorkspace';
 import { GovernanceAudit } from './pages/GovernanceAudit';
+import { ReportsInsights } from './pages/ReportsInsights';
+import { DataArchive } from './pages/DataArchive';
 import { FieldExecution } from './pages/FieldExecution';
 import { FieldInspect } from './pages/FieldInspect';
 import { StationAwareness } from './pages/StationAwareness';
-import { Dashboard } from './pages/Dashboard';
 import { TasksPage } from './pages/TasksPage';
+import { TaskRegister } from './pages/TaskRegister';
 import { Planning } from './pages/Planning';
+import { DualPlanEngine } from './pages/DualPlanEngine';
 import { TrainGraph } from './pages/TrainGraph';
+import { TrainGraphPage } from './pages/TrainGraphPage';
+import { Login } from './pages/Login';
+import { Forbidden403 } from './pages/Forbidden403';
 import { Footer } from './components/layout/Footer';
-
-// Main Layout Wrapper ensuring Footer is rendered ONLY ONCE at bottom of page content
-const MainLayoutWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isCollapsed } = useSidebar();
-  return (
-    <div className="min-h-screen flex flex-col justify-between bg-[#F7F8F5]">
-      <div className="flex-1 flex flex-col">
-        {children}
-      </div>
-      <div className={`transition-all duration-300 ${isCollapsed ? 'ml-20' : 'ml-[260px]'}`}>
-        <Footer />
-      </div>
-    </div>
-  );
-};
-
 import { ProtectedRoute } from './routes/ProtectedRoute';
 
-// Dynamic Landing Redirect based on authenticated role profile
+// Main Layout Wrapper ensuring clean passthrough without redundant margin offsets
+const MainLayoutWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  return <>{children}</>;
+};
+
+// Dynamic Landing Redirect based on authenticated user session profile
 const DynamicLandingRedirect: React.FC = () => {
-  const { currentProfile } = useAuth();
-  return <Navigate to={currentProfile.landingRoute} replace />;
+  const { isAuthenticated, userProfile, currentProfile } = useAuth();
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  const landing = userProfile?.landing_route || currentProfile.landingRoute || '/command';
+  return <Navigate to={landing} replace />;
 };
 
 export const App: React.FC = () => {
@@ -45,6 +44,8 @@ export const App: React.FC = () => {
           <MainLayoutWrapper>
             <Routes>
               <Route path="/" element={<DynamicLandingRedirect />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/403" element={<Forbidden403 />} />
               
               {/* SECTION_CONTROLLER & DIVISIONAL_OFFICER COMMAND WORKSPACE */}
               <Route 
@@ -55,19 +56,21 @@ export const App: React.FC = () => {
                   </ProtectedRoute>
                 } 
               />
-              <Route 
-                path="/dashboard" 
-                element={
-                  <ProtectedRoute allowedRoles={['SECTION_CONTROLLER', 'DIVISIONAL_OFFICER']}>
-                    <Dashboard />
-                  </ProtectedRoute>
-                } 
-              />
+              {/* /dashboard immediately redirects to authenticated landing route (e.g. /command) */}
+              <Route path="/dashboard" element={<DynamicLandingRedirect />} />
               <Route 
                 path="/train-graph" 
                 element={
                   <ProtectedRoute allowedRoles={['SECTION_CONTROLLER']}>
-                    <TrainGraph />
+                    <TrainGraphPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/occupancy" 
+                element={
+                  <ProtectedRoute allowedRoles={['SECTION_CONTROLLER']}>
+                    <TrainGraphPage />
                   </ProtectedRoute>
                 } 
               />
@@ -75,7 +78,15 @@ export const App: React.FC = () => {
                 path="/planning" 
                 element={
                   <ProtectedRoute allowedRoles={['SECTION_CONTROLLER']}>
-                    <Planning />
+                    <DualPlanEngine />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/dual-plan" 
+                element={
+                  <ProtectedRoute allowedRoles={['SECTION_CONTROLLER']}>
+                    <DualPlanEngine />
                   </ProtectedRoute>
                 } 
               />
@@ -95,7 +106,7 @@ export const App: React.FC = () => {
                 path="/tasks" 
                 element={
                   <ProtectedRoute allowedRoles={['SECTION_CONTROLLER', 'DEPT_SUPERVISOR']}>
-                    <TasksPage />
+                    <TaskRegister />
                   </ProtectedRoute>
                 } 
               />
@@ -129,6 +140,14 @@ export const App: React.FC = () => {
                   </ProtectedRoute>
                 } 
               />
+              <Route 
+                path="/station/memos" 
+                element={
+                  <ProtectedRoute allowedRoles={['STATION_MASTER']}>
+                    <StationAwareness />
+                  </ProtectedRoute>
+                } 
+              />
 
               {/* DIVISIONAL_OFFICER WORKSPACE */}
               <Route 
@@ -140,10 +159,26 @@ export const App: React.FC = () => {
                 } 
               />
               <Route 
+                path="/reports" 
+                element={
+                  <ProtectedRoute allowedRoles={['DIVISIONAL_OFFICER']}>
+                    <ReportsInsights />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/archive" 
+                element={
+                  <ProtectedRoute allowedRoles={['DIVISIONAL_OFFICER']}>
+                    <DataArchive />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
                 path="/audit" 
                 element={
                   <ProtectedRoute allowedRoles={['DIVISIONAL_OFFICER']}>
-                    <GovernanceAudit />
+                    <DataArchive />
                   </ProtectedRoute>
                 } 
               />

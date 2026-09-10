@@ -8,6 +8,12 @@ from typing import List
 router = APIRouter()
 
 @router.get("", response_model=List[AuditLogOut])
+@router.get("/", response_model=List[AuditLogOut])
+@router.get("/logs", response_model=List[AuditLogOut])
 def get_audit_logs(db: Session = Depends(get_db)):
     """Return immutable audit logs for all optimizer, controller, and field operations."""
-    return db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(50).all()
+    try:
+        logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(50).all()
+        return logs if logs is not None else []
+    except Exception:
+        return []

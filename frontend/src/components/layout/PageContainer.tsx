@@ -13,16 +13,18 @@ export const PageContainer: React.FC<PageContainerProps> = ({ children, title, s
   const { isCollapsed } = useSidebar();
   
   return (
-    <div className="min-h-screen bg-[#F7F8F5] flex">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#F7F8F5]">
       <Sidebar />
-      <div className={`flex-1 ${isCollapsed ? 'ml-20' : 'ml-[260px]'} transition-all duration-300 ease-in-out flex flex-col min-w-0`}>
+      <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden">
         <Header title={title} subtitle={subtitle} />
-        <main className="flex-1 p-8 overflow-y-auto">
-          {children}
+        <main className="flex-1 min-w-0 overflow-y-auto p-6 md:p-8">
+          <div className="w-full max-w-[1600px] mx-auto space-y-6">
+            {children}
+          </div>
         </main>
         
         {/* Safety & Prototype Disclaimer footer */}
-        <footer className="px-8 py-3.5 bg-white/80 backdrop-blur-md border-t border-slate-200/80 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-2xs">
+        <footer className="px-6 md:px-8 py-3.5 bg-white/80 backdrop-blur-md border-t border-slate-200/80 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-2xs shrink-0">
           <div className="flex items-center gap-2 text-slate-600 font-medium">
             <Info size={14} className="text-blue-600 shrink-0" />
             <span>

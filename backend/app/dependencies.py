@@ -6,12 +6,21 @@ import jwt
 from jwt.exceptions import PyJWTError, ExpiredSignatureError
 from app.database import SessionLocal
 from app.config import get_settings
-from app.models import AuditLog
+from app.models import AuditLog, SecurityAuditLog
 
 settings = get_settings()
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login-as")
-oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/auth/login-as", auto_error=False)
+ROLE_CAPABILITIES = {
+    "SECTION_CONTROLLER": ["VIEW_COMMAND", "RUN_OPTIMIZER", "SUBMIT_BLOCK", "VIEW_TIMETABLE"],
+    "DEPT_SUPERVISOR": ["VIEW_DEPT", "VERIFY_TASK", "UPDATE_READINESS", "ACK_BLOCK"],
+    "DIVISIONAL_OFFICER": ["VIEW_GOVERNANCE", "SANCTION_BLOCK", "OVERRIDE_BLOCK", "VIEW_AUDIT"],
+    "FIELD_EXEC_LEAD": ["VIEW_FIELD", "EXECUTE_BLOCK", "LOG_FIELD_EVENT"],
+    "FIELD_INSPECTOR": ["REPORT_DEFECT", "VIEW_INSPECTIONS"],
+    "STATION_MASTER": ["VIEW_STATION", "ACK_STATION"],
+}
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
@@ -28,13 +37,16 @@ def decode_jwt_token(token: str) -> dict:
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM]
         )
-        username: str = payload.get("sub")
-        if username is None:
+        service_id: str = payload.get("sub") or payload.get("service_id")
+        if not service_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate credentials: sub missing",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        role = payload.get("role", "")
+        if "capabilities" not in payload or not payload["capabilities"]:
+            payload["capabilities"] = ROLE_CAPABILITIES.get(role, [])
         return payload
     except ExpiredSignatureError:
         raise HTTPException(
@@ -60,33 +72,64 @@ def get_current_user_optional(token: Optional[str] = Depends(oauth2_scheme_optio
     if token:
         return decode_jwt_token(token)
     return {
-        "sub": "CONTROLLER_DEFAULT",
+        "sub": "IR-OPS-1102",
+        "service_id": "IR-OPS-1102",
+        "name": "Rajesh Sharma",
+        "designation": "Chief Section Controller",
         "role": "SECTION_CONTROLLER",
-        "department": "OPERATIONS",
+        "department": "OPS",
         "division_id": "DLI",
-        "section_ids": [1, 2, 3]
+        "section_ids": [1, 2, 3],
+        "capabilities": ROLE_CAPABILITIES.get("SECTION_CONTROLLER", [])
     }
 
 
-def require_capabilities(*allowed_roles: str):
+def require(*required_capabilities: str):
     """
-    Role Capabilities Guard:
-    Verifies that current_user['role'] is in allowed_roles.
-    If unauthorized:
-      - Inserts audit row in AuditLog: actor_id=current_user["sub"], actor_role=current_user["role"], action="ACCESS_DENIED", entity_type="SECURITY_BARRIER", entity_id=request.url.path.
-      - Raises HTTPException(status_code=403, detail="Access forbidden: role lacks required capabilities")
+    Capability Guard:
+    Verifies that current_user has at least one of required_capabilities
+    or that current_user['role'] matches one of the allowed parameters.
+    Logs access denial to SecurityAuditLog and AuditLog.
     """
     def capability_checker(
         request: Request,
         current_user: dict = Depends(get_current_user),
         db: Session = Depends(get_db)
     ) -> dict:
-        user_role = current_user.get("role")
-        if user_role not in allowed_roles:
-            actor = str(current_user.get("sub", "UNKNOWN"))
+        user_role = current_user.get("role", "")
+        user_caps = current_user.get("capabilities", [])
+        if not user_caps:
+            user_caps = ROLE_CAPABILITIES.get(user_role, [])
+
+        # Check if user matches role directly or has any required capability
+        has_access = False
+        for req in required_capabilities:
+            if req == user_role or req in user_caps:
+                has_access = True
+                break
+
+        if not has_access:
+            actor = str(current_user.get("service_id") or current_user.get("sub", "UNKNOWN"))
             role_val = str(user_role or "ANONYMOUS")
             division = str(current_user.get("division_id", "DLI"))
             endpoint_path = str(request.url.path)
+            ip = request.client.host if request.client else "unknown"
+
+            # 1. Log to immutable SecurityAuditLog
+            try:
+                sec_log = SecurityAuditLog(
+                    actor_id=actor,
+                    actor_role=role_val,
+                    action="ACCESS_DENIED",
+                    endpoint=endpoint_path,
+                    ip_address=ip,
+                    details=f"Denied access to {endpoint_path}. Required: {list(required_capabilities)}. Has: {user_caps}"
+                )
+                db.add(sec_log)
+            except Exception as e:
+                print(f"[SecurityAuditLog Error]: {e}")
+
+            # 2. Also log to legacy AuditLog
             try:
                 audit = AuditLog(
                     actor_id=actor,
@@ -96,7 +139,7 @@ def require_capabilities(*allowed_roles: str):
                     entity_type="SECURITY_BARRIER",
                     entity_id=endpoint_path,
                     reason_code="INSUFFICIENT_ROLE_CAPABILITY",
-                    reason_text=f"Role '{user_role}' denied access to {endpoint_path}. Required roles: {list(allowed_roles)}"
+                    reason_text=f"Role '{user_role}' denied access to {endpoint_path}. Required: {list(required_capabilities)}"
                 )
                 db.add(audit)
                 db.commit()
@@ -106,8 +149,12 @@ def require_capabilities(*allowed_roles: str):
 
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access forbidden: role lacks required capabilities"
+                detail=f"Access forbidden: lacks required capability {list(required_capabilities)}"
             )
         return current_user
 
     return capability_checker
+
+
+# Backward compatibility alias
+require_capabilities = require

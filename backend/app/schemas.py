@@ -1,5 +1,5 @@
-from pydantic import BaseModel, ConfigDict, Field
-from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 from app.models import (
     TaskStatus, SafetyLane, Department, BlockPlanStatus, FieldEventType, DelayLossCode
@@ -77,6 +77,7 @@ class TaskOut(BaseModel):
     id: int
     task_code: str
     department: Department
+    dept: Optional[str] = None
     work_type: str
     asset_id: Optional[int] = None
     block_section_id: int
@@ -84,11 +85,16 @@ class TaskOut(BaseModel):
     interlocking_area_id: Optional[int] = None
     km_from: float
     km_to: float
+    start_km: Optional[float] = None
+    end_km: Optional[float] = None
     lane: SafetyLane
+    workflow_lane: Optional[str] = None
     safety_class: Optional[str] = None
     priority_band: Optional[str] = None
     priority_score: Optional[float] = None
+    priority_pts: Optional[float] = None
     readiness_score: Optional[float] = 100.0
+    readiness_pts: Optional[float] = 100.0
     readiness_status: Optional[str] = "HIGH"
     readiness_reasons: Optional[List[str]] = []
     requires_line_block: int = 1
@@ -96,6 +102,7 @@ class TaskOut(BaseModel):
     requires_disconnection: int = 0
     required_block_type: Optional[str] = None
     estimated_duration_minutes: int
+    duration_min: Optional[int] = None
     duration_buffer_minutes: int = 15
     material_ready: int = 1
     ptw_ready: int = 1
@@ -112,6 +119,10 @@ class TaskOut(BaseModel):
     team_id: Optional[int] = 101
     read_only: Optional[bool] = False
     co_block_partner: Optional[bool] = False
+    is_co_block_partner: Optional[bool] = False
+    can_edit: Optional[bool] = True
+    can_verify: Optional[bool] = True
+    edit_actions: Optional[List[str]] = []
     status: TaskStatus
     created_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True, use_enum_values=True)
@@ -120,12 +131,21 @@ class TaskOut(BaseModel):
 class TaskCreate(BaseModel):
     department: Department
     work_type: str
+    task_code: Optional[str] = None
     asset_id: Optional[int] = None
-    block_section_id: int
-    km_from: float
-    km_to: float
-    lane: SafetyLane
-    estimated_duration_minutes: int
+    block_section_id: Optional[int] = 1
+    km_from: Optional[float] = None
+    km_to: Optional[float] = None
+    start_km: Optional[float] = None
+    end_km: Optional[float] = None
+    lane: Optional[SafetyLane] = None
+    workflow_lane: Optional[SafetyLane] = None
+    estimated_duration_minutes: Optional[int] = None
+    duration_min: Optional[int] = None
+    priority_score: Optional[float] = None
+    priority_pts: Optional[float] = None
+    readiness_score: Optional[float] = 100.0
+    readiness_pts: Optional[float] = 100.0
     duration_buffer_minutes: Optional[int] = 15
     requires_line_block: int = 1
     requires_power_block: int = 0
@@ -180,6 +200,7 @@ class DefectIngestSchema(BaseModel):
     block_section_id: Optional[int] = 1
     severity: str  # EMERGENCY, URGENT, ROUTINE
     department: Optional[Department] = Department.ENG
+    reported_by: Optional[str] = None
     safety_protocol_acknowledged: Optional[bool] = False
     estimated_duration_minutes: Optional[int] = 90
     model_config = ConfigDict(use_enum_values=True)
@@ -352,11 +373,34 @@ class LoginAsRequest(BaseModel):
     division_id: Optional[str] = None
 
 
+class LoginCredentialsRequest(BaseModel):
+    service_id: str
+    password: str
+
+
+class UserProfileOut(BaseModel):
+    service_id: str
+    name: str
+    designation: str
+    role: str
+    department: str
+    division_id: str
+    section_ids: Optional[List[int]] = None
+    team_id: Optional[int] = None
+    station_id: Optional[int] = None
+    capabilities: List[str] = []
+    model_config = ConfigDict(from_attributes=True)
+
+
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     role: str
     department: str
+    user: Optional[UserProfileOut] = None
+    capabilities: List[str] = []
+    landing_route: Optional[str] = None
+
 
 
 class OverrideRequest(BaseModel):
@@ -423,17 +467,17 @@ class BlockAlterationAdviceOut(BaseModel):
 
 class AuditLogOut(BaseModel):
     id: int
-    actor_id: str
-    actor_role: str
-    division_id: str
+    actor_id: Union[str, int]
+    actor_role: Optional[str] = "CONTROLLER"
+    division_id: Optional[str] = "DLI"
     action: str
-    entity_type: str
-    entity_id: str
+    entity_type: Optional[str] = "BLOCK_PLAN"
+    entity_id: Optional[Union[str, int]] = "1"
     before_json: Optional[str] = None
     after_json: Optional[str] = None
     reason_code: Optional[str] = None
     reason_text: Optional[str] = None
-    timestamp: datetime
+    timestamp: Optional[datetime] = None
     # Legacy field mappings
     role: Optional[str] = None
     division: Optional[str] = None
@@ -442,6 +486,11 @@ class AuditLogOut(BaseModel):
     rules_version: Optional[str] = None
     created_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator('actor_id', mode='before')
+    @classmethod
+    def serialize_actor_id(cls, v):
+        return str(v) if v is not None else "SYSTEM"
 
 
 class DashboardSummaryOut(BaseModel):
@@ -458,3 +507,72 @@ class DashboardSummaryOut(BaseModel):
     solver_status: str
     operational_mode: str
     status: str
+
+
+# ==============================================================================
+# 5. APPEND-ONLY EVENT LOG & STATE PROJECTION SCHEMAS (PHASE 2)
+# ==============================================================================
+
+class EventLogOut(BaseModel):
+    id: int
+    ref_type: str
+    ref_id: str
+    stage: str
+    event: str
+    actor_id: str
+    actor_role: str
+    actor_dept: str
+    plan_version: int = 1
+    reason_code: Optional[str] = None
+    payload: Optional[Dict[str, Any]] = None
+    ts: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StateProjectionOut(BaseModel):
+    id: int
+    ref_type: str
+    ref_id: str
+    stage: str
+    plan_version: int = 1
+    last_event: str
+    last_actor_id: str
+    last_event_ts: datetime
+    reason_code: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AppendEventRequest(BaseModel):
+    ref_type: Optional[str] = "TASK"
+    ref_id: Optional[str] = None
+    stage: str
+    event: str
+    actor_id: Optional[str] = None
+    actor_role: Optional[str] = None
+    actor_dept: Optional[str] = None
+    plan_version: int = 1
+    reason_code: Optional[str] = None
+    payload: Optional[Dict[str, Any]] = None
+
+
+class LifecycleHistoryResponse(BaseModel):
+    ref_type: str
+    ref_id: str
+    current_stage: str
+    total_events: int
+    events: List[EventLogOut]
+
+
+class BlockFieldEventRequest(BaseModel):
+    task_id: Optional[int] = None
+    step_event: str
+    plan_version: int
+    loss_code: Optional[str] = None
+    remarks: Optional[str] = None
+    actual_duration_minutes: Optional[int] = None
+    model_config = ConfigDict(extra="ignore")
+
+
+class BlockReplanRequest(BaseModel):
+    reason: Optional[str] = "Operational Replan and Window Adjustment"
+    model_config = ConfigDict(extra="ignore")

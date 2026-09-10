@@ -75,19 +75,20 @@ export const ScenicTrainHeroArtwork: React.FC<ScenicTrainHeroArtworkProps> = ({
           <rect x="0" y="0" width="540" height="180" fill="url(#skyGrad)" />
           <circle cx="440" cy="50" r="100" fill="url(#sunGlow)" />
 
-          {/* Subtle Watermark Typography Overlaid on Art: "INDIA MOVES TOGETHER" */}
+          {/* Subtle Watermark Typography Overlaid on Art: "INDIAN RAILWAYS — CONNECTING A STRONGER TOMORROW" */}
           <text
             x="270"
-            y="42"
+            y="32"
             textAnchor="middle"
-            fill="#7A141E"
-            fillOpacity="0.08"
-            fontSize="26"
-            fontFamily="'Source Serif 4', Georgia, serif"
-            fontWeight="900"
-            letterSpacing="0.28em"
+            fill="#0F2841"
+            fillOpacity="0.70"
+            fontSize="10"
+            fontFamily="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+            fontWeight="800"
+            letterSpacing="0.25em"
+            className="uppercase tracking-widest opacity-70"
           >
-            INDIA MOVES TOGETHER
+            INDIAN RAILWAYS — CONNECTING A STRONGER TOMORROW
           </text>
 
           {/* Distant Misty Mountain Ridges */}

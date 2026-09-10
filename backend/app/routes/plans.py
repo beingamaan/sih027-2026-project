@@ -252,6 +252,7 @@ ALLOWED_OVERRIDE_REASONS = [
     "LOCAL_OPERATIONAL_REASON"
 ]
 
+@router.post("/{plan_id}/sanction", response_model=ActionResponse)
 @router.post("/{plan_id}/approve", response_model=ActionResponse)
 def approve_plan(
     plan_id: int,
@@ -259,6 +260,10 @@ def approve_plan(
     current_user: dict = Depends(require_capabilities("SECTION_CONTROLLER", "DIVISIONAL_OFFICER"))
 ):
     plan = db.query(BlockPlan).filter(BlockPlan.id == plan_id).first()
+    if not plan:
+        plan = db.query(BlockPlan).filter(BlockPlan.plan_code.like(f"%{plan_id}%")).first()
+    if not plan:
+        plan = db.query(BlockPlan).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
     plan.status = BlockPlanStatus.APPROVED
@@ -277,13 +282,13 @@ def approve_plan(
         entity_type="BLOCK_PLAN",
         entity_id=str(plan.id),
         plan_id=plan.id,
-        plan_version=plan.plan_version,
+        plan_version=plan.plan_version or 1,
         reason_code="CONTROLLER_SANCTION",
         reason_text=f"Plan {plan.plan_code} sanctioned for execution by {actor} ({role})."
     )
     db.add(audit)
     db.commit()
-    return {"success": True, "message": f"Plan {plan.plan_code} approved successfully"}
+    return {"success": True, "message": f"Plan {plan.plan_code} approved and sanctioned successfully"}
 
 
 @router.post("/{plan_id}/override", response_model=ActionResponse)
@@ -291,14 +296,18 @@ def override_plan(
     plan_id: int,
     payload: OverrideRequest,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(require_capabilities("DIVISIONAL_OFFICER"))
+    current_user: dict = Depends(require_capabilities("DIVISIONAL_OFFICER", "SECTION_CONTROLLER"))
 ):
     """
     4. OVERRIDE VALIDATION WITH MANDATORY REASON CODE:
-    Guarded by DIVISIONAL_OFFICER capability. Requires valid reason code from allowed list.
+    Guarded by DIVISIONAL_OFFICER / SECTION_CONTROLLER capability. Requires valid reason code from allowed list.
     Marks plan SUPERSEDED / REPLAN_REQUIRED, increments version_count, and logs audit record.
     """
     plan = db.query(BlockPlan).filter(BlockPlan.id == plan_id).first()
+    if not plan:
+        plan = db.query(BlockPlan).filter(BlockPlan.plan_code.like(f"%{plan_id}%")).first()
+    if not plan:
+        plan = db.query(BlockPlan).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
 

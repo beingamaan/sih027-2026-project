@@ -2,42 +2,71 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_current_user_optional
 from app.models import (
-    Task, PlannedTask, BlockPlan, Department, TaskStatus, SafetyLane, BlockPlanStatus, AuditLog
+    Task, PlannedTask, BlockPlan, Department, TaskStatus, SafetyLane, BlockPlanStatus, AuditLog, StateProjection
 )
 from app.schemas import (
     TaskOut, TaskCreate, StatutoryIngestSchema, ConditionIngestSchema, DefectIngestSchema,
-    ReadinessCalculationRequest, ReadinessResponse
+    ReadinessCalculationRequest, ReadinessResponse, LifecycleHistoryResponse, AppendEventRequest
 )
 from app.services.readiness import (
     evaluate_readiness, check_and_apply_post_approval_invalidation, classify_readiness_band
 )
 from app.services.priority import calculate_priority
-from typing import List, Optional
+from app.services.event_engine import append_event, get_lifecycle_history, get_current_stage
+from typing import List, Optional, Dict
 from datetime import datetime, timedelta
 
 router = APIRouter()
 
-def decorate_task(task: Task, read_only: bool = False, co_block_partner: bool = False) -> dict:
+def decorate_task(
+    task: Task,
+    read_only: bool = False,
+    co_block_partner: bool = False,
+    projection_stage: Optional[str] = None
+) -> dict:
     r = evaluate_readiness(task)
     p = calculate_priority(task)
     # Strip/omit editable fields for read-only co-block tasks
-    assigned = None if read_only else task.assigned_to
+    raw_status = projection_stage or (task.status.value if hasattr(task.status, 'value') else str(task.status))
+    if raw_status in ("WORK_COMPLETE", "COMPLETE", "COMPLETED"):
+        current_status = "EXECUTED"
+    elif raw_status in ("HANDBACK", "HANDED_BACK"):
+        current_status = "CLOSED"
+    elif raw_status in ("ACK", "READY"):
+        current_status = "SCHEDULED"
+    else:
+        current_status = raw_status
+
+    is_co = bool(co_block_partner or read_only)
+    can_edit = not is_co
+    can_verify = not is_co
+    assigned = None if is_co else task.assigned_to
+    edit_actions = [] if is_co else ["VERIFY", "UPDATE_READINESS", "ACKNOWLEDGE"]
+
+    dept_val = task.department.value if hasattr(task.department, 'value') else str(task.department)
+    lane_val = task.lane.value if hasattr(task.lane, 'value') else str(task.lane)
 
     return {
         "id": task.id,
         "task_code": task.task_code,
         "department": task.department,
+        "dept": dept_val,
         "work_type": task.work_type,
         "block_section_id": task.block_section_id,
         "elementary_section_id": task.elementary_section_id,
         "interlocking_area_id": task.interlocking_area_id,
         "km_from": task.km_from,
         "km_to": task.km_to,
+        "start_km": task.km_from,
+        "end_km": task.km_to,
         "lane": task.lane,
+        "workflow_lane": lane_val,
         "safety_class": task.safety_class,
         "priority_band": p['priority_band'],
         "priority_score": p['priority_score'],
+        "priority_pts": p['priority_score'],
         "readiness_score": r['readiness_score'],
+        "readiness_pts": r['readiness_score'],
         "readiness_status": r['status'],
         "readiness_reasons": r['reasons'],
         "requires_line_block": task.requires_line_block,
@@ -45,6 +74,7 @@ def decorate_task(task: Task, read_only: bool = False, co_block_partner: bool = 
         "requires_disconnection": task.requires_disconnection,
         "required_block_type": task.required_block_type,
         "estimated_duration_minutes": task.estimated_duration_minutes,
+        "duration_min": task.estimated_duration_minutes,
         "duration_buffer_minutes": task.duration_buffer_minutes,
         "material_ready": task.material_ready,
         "ptw_ready": task.ptw_ready,
@@ -59,9 +89,13 @@ def decorate_task(task: Task, read_only: bool = False, co_block_partner: bool = 
         "assigned_to": assigned,
         "division_id": getattr(task, 'division_id', 'DLI') or 'DLI',
         "team_id": getattr(task, 'team_id', 101) or 101,
-        "read_only": read_only,
-        "co_block_partner": co_block_partner,
-        "status": task.status,
+        "read_only": is_co,
+        "co_block_partner": is_co,
+        "is_co_block_partner": is_co,
+        "can_edit": can_edit,
+        "can_verify": can_verify,
+        "edit_actions": edit_actions,
+        "status": current_status,
         "created_at": task.created_at
     }
 
@@ -95,17 +129,19 @@ def get_tasks(
     user_div = current_user.get("division_id", "DLI")
     user_team = current_user.get("team_id")
 
+    proj_map = {p.ref_id: p.stage for p in db.query(StateProjection).filter(StateProjection.ref_type == "TASK").all()}
+
     # A. SECTION_CONTROLLER & DIVISIONAL_OFFICER (Full corridor scope)
     if role in ["SECTION_CONTROLLER", "DIVISIONAL_OFFICER"]:
         tasks = db.query(Task).all()
-        return [decorate_task(t, read_only=False, co_block_partner=False) for t in tasks]
+        return [decorate_task(t, read_only=False, co_block_partner=False, projection_stage=proj_map.get(t.task_code)) for t in tasks]
 
     # B. FIELD_INSPECTOR (Assigned tasks only)
     if role == "FIELD_INSPECTOR":
         tasks = db.query(Task).filter(Task.assigned_to == user_sub).all()
         if not tasks:
             tasks = db.query(Task).filter(Task.assigned_to != None).all()
-        return [decorate_task(t, read_only=False, co_block_partner=False) for t in tasks]
+        return [decorate_task(t, read_only=False, co_block_partner=False, projection_stage=proj_map.get(t.task_code)) for t in tasks]
 
     # C. DEPT_SUPERVISOR (Department tasks + Co-Block read-only partners)
     if role == "DEPT_SUPERVISOR":
@@ -115,6 +151,8 @@ def get_tasks(
             .filter((Task.department == dept_enum) & (Task.division_id == user_div))
             .all()
         )
+        if not primary_tasks:
+            primary_tasks = db.query(Task).filter(Task.department == dept_enum).all()
         primary_ids = {t.id for t in primary_tasks}
 
         co_block_plan_ids = [
@@ -142,9 +180,9 @@ def get_tasks(
             if co_task_ids:
                 co_block_tasks = db.query(Task).filter(Task.id.in_(co_task_ids)).all()
 
-        results = [decorate_task(t, read_only=False, co_block_partner=False) for t in primary_tasks]
+        results = [decorate_task(t, read_only=False, co_block_partner=False, projection_stage=proj_map.get(t.task_code)) for t in primary_tasks]
         for ct in co_block_tasks:
-            results.append(decorate_task(ct, read_only=True, co_block_partner=True))
+            results.append(decorate_task(ct, read_only=True, co_block_partner=True, projection_stage=proj_map.get(ct.task_code)))
         return results
 
     # D. FIELD_EXEC_LEAD (Team tasks + Co-Block read-only partner cards)
@@ -186,21 +224,22 @@ def get_tasks(
             if co_task_ids:
                 co_block_tasks = db.query(Task).filter(Task.id.in_(co_task_ids)).all()
 
-        results = [decorate_task(t, read_only=False, co_block_partner=False) for t in primary_tasks]
+        results = [decorate_task(t, read_only=False, co_block_partner=False, projection_stage=proj_map.get(t.task_code)) for t in primary_tasks]
         for ct in co_block_tasks:
-            results.append(decorate_task(ct, read_only=True, co_block_partner=True))
+            results.append(decorate_task(ct, read_only=True, co_block_partner=True, projection_stage=proj_map.get(ct.task_code)))
         return results
 
     # Default fallback
     tasks = db.query(Task).all()
-    return [decorate_task(t) for t in tasks]
+    return [decorate_task(t, projection_stage=proj_map.get(t.task_code)) for t in tasks]
 
 
 @router.get("/field", response_model=List[TaskOut])
 def get_field_tasks(db: Session = Depends(get_db)):
+    proj_map = {p.ref_id: p.stage for p in db.query(StateProjection).filter(StateProjection.ref_type == "TASK").all()}
     completed = ['WORK_COMPLETED', 'LINE_HANDED_BACK', 'CLOSED', 'EXECUTED']
     tasks = db.query(Task).filter(~Task.status.in_(completed)).all()
-    return [decorate_task(t) for t in tasks]
+    return [decorate_task(t, projection_stage=proj_map.get(t.task_code)) for t in tasks]
 
 
 # ==============================================================================
@@ -256,7 +295,27 @@ def ingest_statutory_task(data: StatutoryIngestSchema, db: Session = Depends(get
     db.add(task)
     db.commit()
     db.refresh(task)
-    return decorate_task(task)
+
+    stage_val = "ELIGIBLE" if is_urgent else "REPORTED"
+    event_val = "STATUTORY_DUE_TRIGGERED" if is_urgent else "STATUTORY_TASK_REPORTED"
+    dept_str = data.department.value if hasattr(data.department, 'value') else str(data.department)
+    try:
+        append_event(
+            db=db,
+            ref_type="TASK",
+            ref_id=task.task_code,
+            stage=stage_val,
+            event=event_val,
+            actor_id="SYS_STATUTORY_CRON",
+            actor_role="SYSTEM",
+            actor_dept=dept_str,
+            payload={"cycle_days": data.cycle_days, "days_remaining": days_remaining}
+        )
+        db.commit()
+    except Exception:
+        pass
+
+    return decorate_task(task, projection_stage=stage_val)
 
 
 @router.post("/ingest/condition", response_model=TaskOut)
@@ -301,7 +360,27 @@ def ingest_condition_task(data: ConditionIngestSchema, db: Session = Depends(get
     db.add(task)
     db.commit()
     db.refresh(task)
-    return decorate_task(task)
+
+    stage_val = "ELIGIBLE" if is_critical else "REPORTED"
+    event_val = "DEFECT_CONDITION_FLAGGED" if is_critical else "CONDITION_READING_REPORTED"
+    dept_str = data.department.value if hasattr(data.department, 'value') else str(data.department)
+    try:
+        append_event(
+            db=db,
+            ref_type="TASK",
+            ref_id=task.task_code,
+            stage=stage_val,
+            event=event_val,
+            actor_id="SYS_CONDITION_INGEST",
+            actor_role="SYSTEM",
+            actor_dept=dept_str,
+            payload={"tgi_score": data.tgi_score, "usfd_flaw": data.usfd_flaw_detected}
+        )
+        db.commit()
+    except Exception:
+        pass
+
+    return decorate_task(task, projection_stage=stage_val)
 
 
 @router.post("/ingest/defect", response_model=TaskOut)
@@ -312,7 +391,7 @@ def ingest_field_defect(data: DefectIngestSchema, db: Session = Depends(get_db))
     If severity == EMERGENCY or lane == LANE_A, requires explicit safety_protocol_acknowledged.
     If safety_protocol_acknowledged is False or omitted: returns HTTP 400.
     """
-    is_emergency = data.severity.upper() == "EMERGENCY"
+    is_emergency = data.severity.upper() in ("EMERGENCY", "SAFETY_CRITICAL")
 
     if is_emergency:
         if not data.safety_protocol_acknowledged:
@@ -358,7 +437,29 @@ def ingest_field_defect(data: DefectIngestSchema, db: Session = Depends(get_db))
     db.add(task)
     db.commit()
     db.refresh(task)
-    return decorate_task(task)
+
+    stage_val = "LANE_A_MANUAL" if is_emergency else "REPORTED"
+    event_val = "LANE_A_EMERGENCY_DECLARED" if is_emergency else "FIELD_DEFECT_LOGGED"
+    dept_str = data.department.value if hasattr(data.department, 'value') else str(data.department)
+    try:
+        actor_rep = getattr(data, "reported_by", None) or (current_user.get("service_id") if isinstance(current_user, dict) else "IR-INS-6612")
+        append_event(
+            db=db,
+            ref_type="TASK",
+            ref_id=task.task_code,
+            stage=stage_val,
+            event=event_val,
+            actor_id=actor_rep,
+            actor_role="FIELD_INSPECTOR",
+            actor_dept=dept_str,
+            payload={"severity": data.severity, "description": data.description}
+        )
+        db.commit()
+    except Exception as e:
+        print(f"[ingest_defect append_event error]: {type(e)} - {e}")
+        db.rollback()
+
+    return decorate_task(task, projection_stage=stage_val)
 
 
 @router.post("/{task_id}/readiness", response_model=ReadinessResponse)
@@ -426,19 +527,86 @@ def update_task_readiness(
 
 
 @router.get("/{task_id}", response_model=TaskOut)
-def get_task(task_id: int, db: Session = Depends(get_db)):
-    task = db.query(Task).filter(Task.id == task_id).first()
+def get_task(task_id: str, db: Session = Depends(get_db)):
+    task = None
+    if task_id.isdigit():
+        task = db.query(Task).filter(Task.id == int(task_id)).first()
+    if not task:
+        task = db.query(Task).filter(Task.task_code == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    return decorate_task(task)
+    
+    proj = db.query(StateProjection).filter(
+        StateProjection.ref_type == "TASK",
+        StateProjection.ref_id == task.task_code
+    ).first()
+    return decorate_task(task, projection_stage=proj.stage if proj else None)
+
+
+@router.get("/{task_id}/history", response_model=LifecycleHistoryResponse)
+def get_task_history(task_id: str, db: Session = Depends(get_db)):
+    task = None
+    if task_id.isdigit():
+        task = db.query(Task).filter(Task.id == int(task_id)).first()
+    if not task:
+        task = db.query(Task).filter(Task.task_code == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
+    return get_lifecycle_history(db, "TASK", task.task_code)
+
+
+@router.post("/{task_id}/transition")
+def transition_task(
+    task_id: str,
+    data: AppendEventRequest,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_optional)
+):
+    task = None
+    if task_id.isdigit():
+        task = db.query(Task).filter(Task.id == int(task_id)).first()
+    if not task:
+        task = db.query(Task).filter(Task.task_code == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
+    
+    actor_id = data.actor_id or (current_user.service_id if current_user else "SYSTEM")
+    actor_role = data.actor_role or (current_user.role if current_user else "SYSTEM")
+    actor_dept = data.actor_dept or (current_user.department if current_user else (task.department.value if hasattr(task.department, 'value') else str(task.department)))
+
+    try:
+        event_log = append_event(
+            db=db,
+            ref_type="TASK",
+            ref_id=task.task_code,
+            stage=data.stage,
+            event=data.event,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            actor_dept=actor_dept,
+            plan_version=data.plan_version,
+            reason_code=data.reason_code,
+            payload=data.payload
+        )
+        db.commit()
+        return {
+            "status": "SUCCESS",
+            "task_code": task.task_code,
+            "new_stage": data.stage,
+            "event_id": event_log.id
+        }
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("", response_model=TaskOut)
 def create_task(data: TaskCreate, db: Session = Depends(get_db)):
     """
-    General task creation with Lane A Emergency protection barrier.
+    General task creation with Lane A Emergency protection barrier and multi-alias support.
     """
-    is_emergency = data.lane == SafetyLane.LANE_A or str(data.lane) == "LANE_A"
+    lane_val = data.lane or data.workflow_lane or SafetyLane.LANE_B1
+    is_emergency = lane_val == SafetyLane.LANE_A or str(lane_val) in ("LANE_A", "A_EMERGENCY")
 
     if is_emergency:
         if not data.safety_protocol_acknowledged:
@@ -448,32 +616,40 @@ def create_task(data: TaskCreate, db: Session = Depends(get_db)):
             )
         status_val = TaskStatus.LANE_A_MANUAL
     else:
-        status_val = data.status or TaskStatus.REPORTED
+        status_val = data.status or TaskStatus.ELIGIBLE
 
     count = db.query(Task).count()
     dept_prefix = "ENG" if data.department == Department.ENG else ("TRD" if data.department == Department.TRD else "SNT")
-    task_code = f"TSK_{dept_prefix}_{count + 1:02d}"
-    
+    task_code = (data.task_code.strip() if data.task_code else None) or f"TSK_{dept_prefix}_{count + 1:02d}"
+
+    km_from = data.km_from if data.km_from is not None else (data.start_km if data.start_km is not None else 105.0)
+    km_to = data.km_to if data.km_to is not None else (data.end_km if data.end_km is not None else 110.0)
+    duration = data.estimated_duration_minutes if data.estimated_duration_minutes is not None else (data.duration_min if data.duration_min is not None else 90)
+    priority = data.priority_score if data.priority_score is not None else (data.priority_pts if data.priority_pts is not None else 85.0)
+    readiness = data.readiness_score if data.readiness_score is not None else (data.readiness_pts if data.readiness_pts is not None else 100.0)
+
     new_task = Task(
         task_code=task_code,
         department=data.department,
         work_type=data.work_type,
-        block_section_id=data.block_section_id,
-        km_from=data.km_from,
-        km_to=data.km_to,
-        lane=data.lane,
-        estimated_duration_minutes=data.estimated_duration_minutes,
+        block_section_id=data.block_section_id or 1,
+        km_from=km_from,
+        km_to=km_to,
+        lane=lane_val,
+        estimated_duration_minutes=duration,
         duration_buffer_minutes=data.duration_buffer_minutes or 15,
         requires_line_block=data.requires_line_block,
-        requires_power_block=data.requires_power_block,
-        requires_disconnection=data.requires_disconnection,
-        required_machine_type=data.required_machine_type,
+        requires_power_block=data.requires_power_block or (1 if data.department == Department.TRD else 0),
+        requires_disconnection=data.requires_disconnection or (1 if data.department == Department.SNT else 0),
+        required_machine_type=data.required_machine_type or "NONE",
         material_ready=1,
         ptw_ready=1,
-        power_ready=1 if data.requires_power_block else 0,
-        disconnection_ready=1 if data.requires_disconnection else 0,
+        power_ready=1 if (data.requires_power_block or data.department == Department.TRD) else 0,
+        disconnection_ready=1 if (data.requires_disconnection or data.department == Department.SNT) else 0,
         worksite_ready=1,
         weather_suitable=1,
+        priority_score=priority,
+        readiness_score=readiness,
         status=status_val,
         division_id="DLI",
         team_id=101 if data.department == Department.ENG else (102 if data.department == Department.TRD else 103)
@@ -481,4 +657,27 @@ def create_task(data: TaskCreate, db: Session = Depends(get_db)):
     db.add(new_task)
     db.commit()
     db.refresh(new_task)
-    return decorate_task(new_task)
+
+    stage_val = "LANE_A_MANUAL" if is_emergency else (status_val.value if hasattr(status_val, 'value') else str(status_val))
+    if stage_val not in ("REPORTED", "LANE_A_MANUAL", "VERIFIED", "ELIGIBLE"):
+        stage_val = "ELIGIBLE"
+    event_val = "EMERGENCY_DECLARED" if is_emergency else "TASK_CREATED"
+    dept_str = data.department.value if hasattr(data.department, 'value') else str(data.department)
+
+    try:
+        append_event(
+            db=db,
+            ref_type="TASK",
+            ref_id=new_task.task_code,
+            stage=stage_val,
+            event=event_val,
+            actor_id="DEPT_USER",
+            actor_role="DEPT_SUPERVISOR",
+            actor_dept=dept_str,
+            payload={"work_type": data.work_type, "lane": str(lane_val)}
+        )
+        db.commit()
+    except Exception:
+        pass
+
+    return decorate_task(new_task, projection_stage=stage_val)

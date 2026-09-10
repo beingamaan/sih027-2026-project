@@ -111,18 +111,73 @@ def apply_migrations():
             conn.execute(text("UPDATE audit_logs SET entity_id = CAST(COALESCE(plan_id, 1) AS TEXT) WHERE entity_id IS NULL"))
             conn.execute(text("UPDATE audit_logs SET timestamp = COALESCE(created_at, CURRENT_TIMESTAMP) WHERE timestamp IS NULL"))
 
+        # 4. USERS TABLE MIGRATIONS
+        if "users" in existing_tables:
+            user_cols = [c["name"] for c in inspector.get_columns("users")]
+            if "service_id" not in user_cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN service_id TEXT"))
+            if "designation" not in user_cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN designation TEXT DEFAULT 'Railway Official'"))
+            if "division_id" not in user_cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN division_id TEXT DEFAULT 'DLI'"))
+            if "section_ids" not in user_cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN section_ids TEXT DEFAULT '[1, 2, 3]'"))
+            if "team_id" not in user_cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN team_id INTEGER"))
+            if "station_id" not in user_cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN station_id INTEGER"))
+            if "is_active" not in user_cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1"))
+
+            # Sync existing service_id with employee_id if null
+            conn.execute(text("UPDATE users SET service_id = employee_id WHERE service_id IS NULL AND employee_id IS NOT NULL"))
+            conn.execute(text("UPDATE users SET employee_id = service_id WHERE employee_id IS NULL AND service_id IS NOT NULL"))
+            conn.execute(text("UPDATE users SET division_id = COALESCE(division, 'DLI') WHERE division_id IS NULL"))
+            conn.execute(text("UPDATE users SET is_active = COALESCE(active, 1) WHERE is_active IS NULL"))
+
+        # 4. STATIONS TABLE MIGRATIONS
+        if "stations" in existing_tables:
+            stn_cols = [c["name"] for c in inspector.get_columns("stations")]
+            if "code" not in stn_cols:
+                conn.execute(text("ALTER TABLE stations ADD COLUMN code TEXT"))
+                conn.execute(text("UPDATE stations SET code = station_code WHERE code IS NULL"))
+
         conn.commit()
 
 
 def init_db():
     """
-    Initializes database schema, creates any missing tables (e.g. field_events),
-    and runs incremental non-destructive migrations.
+    Initializes database schema, creates any missing tables (e.g. field_events, security_audit_logs),
+    runs incremental non-destructive migrations, and seeds official users.
     """
     # Import all models to ensure metadata registration before create_all
     import app.models  # noqa: F401
     Base.metadata.create_all(bind=engine)
     apply_migrations()
+    
+    # Auto-seed official railway user profiles
+    try:
+        from app.seeds.seed_users import seed_official_users
+        with SessionLocal() as db:
+            seed_official_users(db)
+    except Exception as e:
+        print(f"[seed_users warning]: {e}")
+
+    # Auto-seed pristine demo tasks, blocks, and event sourcing log
+    try:
+        from app.seeds.seed_demo_data import seed_pristine_demo_data
+        with SessionLocal() as db:
+            seed_pristine_demo_data(db)
+    except Exception as e:
+        print(f"[seed_demo_data warning]: {e}")
+
+    # Auto-seed 24-hour corridor timetable and stations
+    try:
+        from app.data.seeds.train_schedule import seed_corridor_stations_and_schedules
+        with SessionLocal() as db:
+            seed_corridor_stations_and_schedules(db)
+    except Exception as e:
+        print(f"[seed_train_schedule warning]: {e}")
 
 
 # Auto-initialize on module load
