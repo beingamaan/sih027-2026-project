@@ -3,6 +3,16 @@ from sqlalchemy.orm import Session
 from app.models import Station, TrainSchedule
 
 CORRIDOR_STATIONS = [
+    {"code": "LKO", "name": "Lucknow Charbagh Jn", "chainage_km": 100.0, "division": "LKO"},
+    {"code": "MKG", "name": "Manak Nagar Jn", "chainage_km": 108.4, "division": "LKO"},
+    {"code": "AMS", "name": "Amausi", "chainage_km": 119.2, "division": "LKO"},
+    {"code": "AJG", "name": "Ajgain Zone", "chainage_km": 128.5, "division": "LKO"},
+    {"code": "SIC", "name": "Sonik", "chainage_km": 137.9, "division": "LKO"},
+    {"code": "ON", "name": "Unnao Junction", "chainage_km": 148.1, "division": "LKO"},
+    {"code": "CNB", "name": "Kanpur Central Gateway", "chainage_km": 158.0, "division": "LKO"},
+]
+
+LEGACY_STATIONS = [
     {"code": "STA", "name": "Station Alpha", "chainage_km": 100.0, "division": "DLI"},
     {"code": "ANVR", "name": "Anandpur", "chainage_km": 108.4, "division": "DLI"},
     {"code": "BRHN", "name": "Barhan Jn", "chainage_km": 119.2, "division": "DLI"},
@@ -66,10 +76,10 @@ RAW_SERVICES = [
         "min_ref": 135,  # 02:15 at KM 120, exits KM 140 at 02:35 (speed: 20km / 20m = 1.0 km/min)
         "speed": 1.0
     },
-    # Direct Conflict 2: 12004 Lucknow Shatabdi
+    # Direct Conflict 2: 12004 Lucknow Swarna Shatabdi
     {
         "train_number": "12004",
-        "train_name": "Lucknow Shatabdi",
+        "train_name": "12004 Lucknow Swarna Shatabdi",
         "priority_class": "SUPERFAST",
         "origin_time": "02:50",
         "direction": "DOWN",
@@ -112,8 +122,8 @@ RAW_SERVICES = [
         "speed": 1.1
     },
     {
-        "train_number": "22436",
-        "train_name": "Vande Bharat Express",
+        "train_number": "22425",
+        "train_name": "22425 / 20103 Vande Bharat Express",
         "priority_class": "PREMIUM",
         "origin_time": "07:30",
         "direction": "DOWN",
@@ -162,8 +172,8 @@ RAW_SERVICES = [
         "speed": 0.85
     },
     {
-        "train_number": "BCN-5042",
-        "train_name": "Freight Rake BCN",
+        "train_number": "BOXN-LKO",
+        "train_name": "BOXN-LKO (Fertilizer / Freight Rake)",
         "priority_class": "GOODS",
         "origin_time": "14:30",
         "direction": "UP",
@@ -235,12 +245,13 @@ RAW_SERVICES = [
 
 def seed_corridor_stations_and_schedules(db: Session) -> dict:
     """
-    Seeds 7 authentic corridor stations across KM 100.0 - 158.0
-    and 18 diverse services across the 24-hour horizon.
+    Seeds authentic Lucknow corridor stations across KM 100.0 - 158.0
+    and diverse services across the 24-hour horizon.
     """
-    # 1. Seed Stations
+    # 1. Seed Stations (both Corridor Stations and legacy test compatibility stations)
     seeded_stations = 0
-    for stn_data in CORRIDOR_STATIONS:
+    all_stations = CORRIDOR_STATIONS + LEGACY_STATIONS
+    for stn_data in all_stations:
         stn = db.query(Station).filter(
             (Station.code == stn_data["code"]) | (Station.station_code == stn_data["code"])
         ).first()

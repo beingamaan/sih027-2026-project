@@ -12,7 +12,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   title,
   subtitle,
   badgeText = "SAFE RAILS, STRONGER INDIA",
-  sectionTag = "DELHI DIVISION · KM 100 – 158"
+  sectionTag = "LUCKNOW DIVISION · KM 100 – 158"
 }) => {
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
 
@@ -93,7 +93,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
             </p>
             <p className="text-[11px] text-[#486581] font-medium mt-1 flex items-center gap-1.5">
               <Sun size={13} className="text-[#D9901A]" />
-              <span>28°C Clear Sky · Delhi Div</span>
+              <span>28°C Clear Sky · Lucknow Div</span>
             </p>
           </div>
 

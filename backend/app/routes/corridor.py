@@ -5,6 +5,8 @@ from app.models import Station, BlockSection, PhysicalLine, Defect, BlockWindow
 
 router = APIRouter()
 
+@router.get("")
+@router.get("/")
 @router.get("/state")
 def get_corridor_state(db: Session = Depends(get_db)):
     """Return comprehensive 58 km corridor topology, physical lines, active blocks, and TSRs."""
@@ -74,7 +76,9 @@ def get_corridor_state(db: Session = Depends(get_db)):
     ]
 
     return {
-        "corridor_name": "Delhi Division 58km Corridor (KM 100 - KM 158)",
+        "corridor_name": "Northern Railway · Lucknow Division (LKO-LJN Section) · LKO – ON – CNB High-Density Section (58 km Sector)",
+        "division": "Northern Railway · Lucknow Division (LKO-LJN Section)",
+        "corridor_title": "LKO – ON – CNB High-Density Section (58 km Sector)",
         "total_km": 58.0,
         "km_start": 100.0,
         "km_end": 158.0,

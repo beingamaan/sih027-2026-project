@@ -5,7 +5,8 @@ from app.dependencies import get_db, require
 from app.models import Task, BlockPlan, StateProjection
 from app.routes import (
     tasks, plans, field, dashboard, analytics,
-    trains, resources, corridor, events, audit, what_if_route, auth, blocks
+    trains, resources, corridor, events, audit, what_if_route, auth, blocks,
+    live_feed
 )
 
 app = FastAPI(
@@ -50,6 +51,8 @@ app.include_router(events.router, prefix="/api/block-events", tags=["Block Event
 app.include_router(field.router, prefix="/api/field", tags=["Field Execution"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
 app.include_router(audit.router, prefix="/api/audit", tags=["Audit"])
+app.include_router(live_feed.router, prefix="/api/live", tags=["Live Feed"])
+app.include_router(live_feed.router, prefix="/live", tags=["Live Feed Direct"])
 
 @app.get("/api/command")
 @app.get("/command")

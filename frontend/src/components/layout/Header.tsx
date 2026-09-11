@@ -24,7 +24,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ 
   title = 'Indian Railways Operations', 
-  subtitle = 'Northern Railway · Delhi Division' 
+  subtitle = 'Northern Railway · Lucknow Division (LKO-LJN Section)' 
 }) => {
   const { toggleSidebar } = useSidebar();
   const navigate = useNavigate();

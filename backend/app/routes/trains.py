@@ -32,7 +32,7 @@ def get_calibrated_fallback_trains() -> List[dict]:
         },
         {
             "id": 102,
-            "train_number": "12004 Shatabdi Express",
+            "train_number": "12004 Lucknow Swarna Shatabdi",
             "train_class": "SUPERFAST",
             "weight_category": "COACHING",
             "block_section_id": 1,
@@ -47,7 +47,7 @@ def get_calibrated_fallback_trains() -> List[dict]:
         },
         {
             "id": 103,
-            "train_number": "Freight BCN-91",
+            "train_number": "BOXN-LKO (Fertilizer / Freight Rake)",
             "train_class": "GOODS",
             "weight_category": "FREIGHT",
             "block_section_id": 2,
@@ -62,7 +62,7 @@ def get_calibrated_fallback_trains() -> List[dict]:
         },
         {
             "id": 104,
-            "train_number": "22436 Vande Bharat Express",
+            "train_number": "22425 / 20103 Vande Bharat Express",
             "train_class": "PREMIUM",
             "weight_category": "COACHING",
             "block_section_id": 1,
@@ -385,10 +385,52 @@ def get_corridor_occupancy(
 ):
     """
     Computes unified Weighted Train Minutes (WTM) and returns occupancy ledger
-    for Plan A (02:00-04:00, 410.0 WTM) vs Plan B (02:00-04:45, 698.0 WTM)
+    for Plan A (02:00-04:00) vs Plan B (02:00-04:45)
     across corridor section KM 120.0-140.0.
     """
     raw_mode = (plan or plan_mode or "A").upper().strip()
     is_plan_b = "B" in raw_mode
+    
+    from app.models import TrainSchedule
+    from app.services.metrics import compute_wtm
+    schedules = db.query(TrainSchedule).all() if db else []
+    if schedules and len(schedules) >= 18:
+        train_data = [
+            {
+                "train_number": s.train_number,
+                "train_name": s.train_name,
+                "priority_class": s.priority_class,
+                "origin_time": s.origin_time,
+                "station_entries": s.station_entries
+            }
+            for s in schedules
+        ]
+        start_min = 120
+        end_min = 285 if is_plan_b else 240
+        wtm_res = compute_wtm(
+            plan_start_min=start_min,
+            plan_end_min=end_min,
+            block_km_start=120.0,
+            block_km_end=140.0,
+            trains=train_data
+        )
+        conflicts = [x for x in wtm_res["ledger"] if x["has_conflict"]]
+        return {
+            "plan_mode": "PLAN_B" if is_plan_b else "PLAN_A",
+            "plan_start_min": start_min,
+            "plan_end_min": end_min,
+            "plan_start_str": f"{start_min // 60:02d}:{start_min % 60:02d}",
+            "plan_end_str": f"{end_min // 60:02d}:{end_min % 60:02d}",
+            "duration_minutes": end_min - start_min,
+            "block_km_start": 120.0,
+            "block_km_end": 140.0,
+            "section_name": "KM 120.0 – 140.0 (Barhan – Chamrola)",
+            "horizon_str": "00:00 – 06:00",
+            "total_wtm": wtm_res["total_wtm"],
+            "train_count": len(wtm_res["ledger"]),
+            "conflict_count": len(conflicts),
+            "ledger": wtm_res["ledger"]
+        }
+
     return get_deterministic_corridor_occupancy(is_plan_b)
 

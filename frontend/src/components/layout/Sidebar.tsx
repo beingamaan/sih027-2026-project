@@ -275,42 +275,42 @@ export const Sidebar: React.FC = () => {
     if (activeRole === 'STATION_MASTER') {
       return {
         name: 'M. K. Gupta',
-        title: 'Station Master · GZB (Ghaziabad)',
+        title: 'Station Master · LKO (Lucknow Charbagh)',
         status: 'Station Control Active'
       };
     }
     if (activeRole === 'SECTION_CONTROLLER') {
       return {
         name: 'R. K. Sharma',
-        title: 'Section Controller · Delhi (DLI)',
+        title: 'Section Controller · Lucknow (LKO)',
         status: 'Section Control Active'
       };
     }
     if (activeRole === 'DEPT_SUPERVISOR') {
       return {
         name: 'A. K. Verma',
-        title: 'DEPT SUPERVISOR · P.WAY (ENG)',
+        title: 'Dept Supervisor · Lucknow Division · LKO Operations',
         status: 'Department Control Active'
       };
     }
     if (activeRole === 'FIELD_EXEC_LEAD') {
       return {
         name: 'V. K. Meena',
-        title: 'Field Lead · BLK-2026',
+        title: 'Field Lead · Lucknow Division · LKO Operations',
         status: 'Field Operations Active'
       };
     }
     if (activeRole === 'FIELD_INSPECTOR') {
       return {
         name: 'R. P. Singh',
-        title: 'Track Inspector · DLI Division',
+        title: 'Track Inspector · LKO Division',
         status: 'Track Inspection Active'
       };
     }
     if (activeRole === 'DIVISIONAL_OFFICER' || effectiveRole === 'DIVISIONAL_OFFICER') {
       return {
         name: 'Dr. S. Mukherjee',
-        title: 'Sr. DOM · Review & Sanction',
+        title: 'Sr. DOM · Lucknow Division',
         status: 'Governance Active'
       };
     }
@@ -531,7 +531,7 @@ export const Sidebar: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span>Division:</span>
-                    <span className="text-white font-bold">Delhi (DLI)</span>
+                    <span className="text-white font-bold">Lucknow (LKO)</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Status:</span>

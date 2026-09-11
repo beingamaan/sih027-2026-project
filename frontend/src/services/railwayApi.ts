@@ -178,7 +178,7 @@ export const replanBlock = async (blockId: number | string, reason?: string): Pr
   return res.data;
 };
 
-export const acknowledgeStationBlock = async (blockId: number | string, stationCode: string = 'GZB'): Promise<any> => {
+export const acknowledgeStationBlock = async (blockId: number | string, stationCode: string = 'LKO'): Promise<any> => {
   const res = await api.post(`/api/blocks/${blockId}/sm-ack?station_code=${stationCode}`);
   return res.data;
 };
@@ -190,6 +190,32 @@ export const releaseJointHandback = async (payload?: {
   reason_code?: string;
 }): Promise<any> => {
   const res = await api.post('/api/blocks/handback', payload || {});
+  return res.data;
+};
+
+export const getLiveTrainStatus = async (trainNo: string = '12004'): Promise<any> => {
+  const res = await api.get(`/api/live/trains/${trainNo}`);
+  return res.data;
+};
+
+export const getLiveStationBoard = async (stationCode: string = 'LKO'): Promise<any> => {
+  const res = await api.get(`/api/live/station/${stationCode}`);
+  return res.data;
+};
+
+export interface OptimizerResult {
+  solver_engine: string;
+  status: string;
+  solve_time_ms: number;
+  branches: number;
+  wtm_penalty?: number;
+  min_headway_minutes?: number;
+  maintenance_blocks?: any[];
+  train_schedules?: any[];
+}
+
+export const optimizeCorridor = async (payload?: any): Promise<OptimizerResult> => {
+  const res = await api.post('/api/plans/optimize', payload || {});
   return res.data;
 };
 

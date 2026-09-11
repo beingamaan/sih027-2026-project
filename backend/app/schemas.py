@@ -300,6 +300,22 @@ class DualPlanResponse(BaseModel):
     solver_status: str
     plan_a: Dict[str, Any]
     plan_b: Dict[str, Any]
+    solver_engine: Optional[str] = "Google OR-Tools CP-SAT"
+    solve_time_ms: Optional[float] = None
+    status: Optional[str] = "OPTIMAL"
+    branches: Optional[int] = None
+    wtm_penalty: Optional[float] = None
+
+
+class CorridorOptimizationResponse(BaseModel):
+    solver_engine: str = "Google OR-Tools CP-SAT"
+    status: str = "OPTIMAL"
+    solve_time_ms: float
+    branches: int
+    wtm_penalty: Optional[float] = None
+    min_headway_minutes: int = 4
+    maintenance_blocks: List[Dict[str, Any]] = []
+    train_schedules: List[Dict[str, Any]] = []
 
 
 class WhatIfRequest(BaseModel):

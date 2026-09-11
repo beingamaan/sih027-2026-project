@@ -2,11 +2,28 @@ import React, { useState } from 'react';
 import { Sidebar, useSidebar } from '../components/layout/Sidebar';
 import { Header } from '../components/layout/Header';
 import { OccupancyView } from '../components/charts/OccupancyView';
-import { Train } from 'lucide-react';
+import { Train, RefreshCw } from 'lucide-react';
+import { optimizeCorridor, OptimizerResult } from '../services/railwayApi';
 
 export const TrainGraphPage: React.FC = () => {
   const { isCollapsed } = useSidebar();
   const [selectedPlan, setSelectedPlan] = useState<'PLAN_A' | 'PLAN_B'>('PLAN_A');
+  const [solverTelemetry, setSolverTelemetry] = useState<OptimizerResult | null>(null);
+  const [optimizing, setOptimizing] = useState<boolean>(false);
+
+  const handleReoptimize = async () => {
+    setOptimizing(true);
+    try {
+      const res = await optimizeCorridor();
+      if (res && res.solve_time_ms !== undefined) {
+        setSolverTelemetry(res);
+      }
+    } catch (e) {
+      console.error('Failed to reoptimize:', e);
+    } finally {
+      setOptimizing(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-[#F7F8F5] text-slate-800">
@@ -33,8 +50,27 @@ export const TrainGraphPage: React.FC = () => {
               </p>
             </div>
 
-            {/* Quick KPIs */}
-            <div className="flex items-stretch gap-2.5 flex-wrap">
+            <div className="flex flex-wrap items-center gap-3">
+              {solverTelemetry && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-900/10 border border-emerald-500/30 rounded-full text-xs font-mono text-emerald-800 font-bold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                  <span>⚡ Solved via {solverTelemetry.solver_engine} in {solverTelemetry.solve_time_ms}ms · Status: {solverTelemetry.status}</span>
+                </div>
+              )}
+
+              <button
+                onClick={handleReoptimize}
+                disabled={optimizing}
+                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/20 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw size={15} className={optimizing ? 'animate-spin' : ''} />
+                <span>{optimizing ? 'Re-optimising...' : 'Re-optimise Corridor'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick KPIs */}
+          <div className="flex items-stretch gap-2.5 flex-wrap">
               {/* CORRIDOR NODES */}
               <div className="px-3.5 py-2 bg-white rounded-xl border border-slate-200 shadow-2xs text-center flex flex-col justify-center min-w-[110px]">
                 <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">CORRIDOR NODES</div>
@@ -82,7 +118,6 @@ export const TrainGraphPage: React.FC = () => {
                 </div>
               </div>
             </div>
-          </div>
 
           {/* Full-Page Dual-Mode Occupancy Component */}
           <OccupancyView

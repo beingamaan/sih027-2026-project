@@ -231,7 +231,7 @@ export const DepartmentWorkspace: React.FC = () => {
           <HeroBanner 
             title="Department Maintenance Workspace" 
             subtitle="Infrastructure Verification, TSR & Resource Readiness" 
-            sectionTag="DEPT SUPERVISOR · P.WAY (ENG) · A. K. VERMA · IR-ENG-0891"
+            sectionTag="DEPT SUPERVISOR · P.WAY (ENG) · A. K. VERMA · LUCKNOW DIVISION · LKO OPERATIONS"
           />
 
           {/* Toast Notification */}
@@ -261,7 +261,7 @@ export const DepartmentWorkspace: React.FC = () => {
                 </span>
                 <span className="text-xs text-slate-700 font-semibold">• Supervisor: A. K. Verma</span>
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                  IR-ENG-0891 · DEPT SUPERVISOR · P.WAY (ENG)
+                  IR-ENG-0891 · DEPT SUPERVISOR · P.WAY (ENG) · LKO OPERATIONS
                 </span>
               </div>
               <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
@@ -354,7 +354,7 @@ export const DepartmentWorkspace: React.FC = () => {
                       Planning Horizons &amp; Mega-Block Quota Capacity
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Evaluate maintenance slot utilization across 24h Tactical, 7-Day Rolling, and 30-Day Master quotas for Northern Railway HDN-04 corridor.
+                      Evaluate maintenance slot utilization across 24h Tactical, 7-Day Rolling, and 30-Day Master quotas for Northern Railway Lucknow Division (LKO – ON – CNB Section).
                     </p>
                   </div>
                 </div>
