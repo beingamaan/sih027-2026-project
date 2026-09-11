@@ -4,8 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from app.database import engine, Base, SessionLocal
 from app.dependencies import get_db, require
-from app.models import Task, BlockPlan, StateProjection
+from app.models import Task, BlockPlan, StateProjection, User
 from app.routes import (
     tasks, plans, field, dashboard, analytics,
     trains, resources, corridor, events, audit, what_if_route, auth, blocks,
@@ -37,6 +38,78 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def startup_event():
+    """
+    Ensure database tables are created and demo users are auto-seeded on boot.
+    """
+    # 1. Ensure database tables are created
+    import app.models  # noqa: F401
+    Base.metadata.create_all(bind=engine)
+
+    # 2. Check if user seed file exists or seed functions are available
+    with SessionLocal() as db:
+        user_count = db.query(User).count()
+
+        seeded = False
+        try:
+            from app.data.seeds.users import seed_official_users as seed_fn
+            seed_fn(db)
+            seeded = True
+        except ImportError:
+            try:
+                from app.seeds.seed_users import seed_official_users as seed_fn
+                seed_fn(db)
+                seeded = True
+            except Exception as e:
+                print(f"[STARTUP] Could not load seed_official_users: {e}")
+
+        # If User table was empty and seed function was unavailable, insert default users directly
+        if user_count == 0 and not seeded:
+            import bcrypt
+            salt = bcrypt.gensalt()
+            default_hash = bcrypt.hashpw("demo".encode("utf-8"), salt).decode("utf-8")
+            demo_users = [
+                User(
+                    service_id="IR-ENG-0891",
+                    employee_id="IR-ENG-0891",
+                    password_hash=default_hash,
+                    name="A. K. Verma",
+                    designation="Senior Section Engineer (P-Way)",
+                    role="DEPT_SUPERVISOR",
+                    department="ENG",
+                    division_id="DLI",
+                    division="DLI",
+                    section_ids=[1, 2, 3],
+                    team_id=101,
+                    is_active=True,
+                    active=1,
+                ),
+                User(
+                    service_id="IR-CTR-0101",
+                    employee_id="IR-CTR-0101",
+                    password_hash=default_hash,
+                    name="R. K. Sharma",
+                    designation="Section Controller",
+                    role="SECTION_CONTROLLER",
+                    department="OPS",
+                    division_id="DLI",
+                    division="DLI",
+                    section_ids=[1, 2, 3],
+                    team_id=None,
+                    station_id=None,
+                    is_active=True,
+                    active=1,
+                ),
+            ]
+            db.add_all(demo_users)
+            db.commit()
+            print("[STARTUP] Seeded default demo credentials (IR-ENG-0891, IR-CTR-0101).")
+
+        print(f"[STARTUP] Database verified. Total users registered: {db.query(User).count()}")
+
 
 # Register all REST API endpoints
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
