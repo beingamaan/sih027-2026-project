@@ -1,5 +1,8 @@
-from fastapi import FastAPI, Depends
+import os
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, require
 from app.models import Task, BlockPlan, StateProjection
@@ -92,3 +95,41 @@ def health_check():
         "architecture": "Advisory-Only Explainable Rule Engine",
         "corridor": "58km (KM 100 - KM 158)"
     }
+
+
+# ---------------------------------------------------------------------------
+# FRONTEND STATIC SERVING & SPA CATCH-ALL (Render / Production Deployment)
+# ---------------------------------------------------------------------------
+# Resolve frontend/dist whether running from repo root or backend/ directory
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_possible_dist_paths = [
+    os.path.abspath(os.path.join(_current_dir, "../../frontend/dist")),
+    os.path.abspath(os.path.join(_current_dir, "../../../frontend/dist")),
+    os.path.abspath(os.path.join(os.getcwd(), "frontend/dist")),
+    os.path.abspath(os.path.join(os.getcwd(), "../frontend/dist")),
+]
+
+frontend_dist = None
+for _p in _possible_dist_paths:
+    if os.path.exists(_p) and os.path.isdir(_p):
+        frontend_dist = _p
+        break
+
+if frontend_dist:
+    print(f"[SPA] Serving frontend from: {frontend_dist}")
+    _assets_dir = os.path.join(frontend_dist, "assets")
+    if os.path.exists(_assets_dir):
+        app.mount("/assets", StaticFiles(directory=_assets_dir), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa_frontend(full_path: str):
+        # Never intercept API, docs, or OpenAPI routes
+        if full_path.startswith("api") or full_path.startswith("docs") or full_path.startswith("openapi"):
+            raise HTTPException(status_code=404, detail="API endpoint not found")
+
+        target_file = os.path.join(frontend_dist, full_path)
+        if full_path and os.path.isfile(target_file):
+            return FileResponse(target_file)
+        return FileResponse(os.path.join(frontend_dist, "index.html"))
+else:
+    print(f"[SPA] frontend/dist not found. Searched: {_possible_dist_paths}")
