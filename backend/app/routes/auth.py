@@ -21,6 +21,34 @@ ROLE_CONFIGS = {
     "STATION_MASTER": {"dept": "OPS", "station_id": 10, "division_id": "DLI"},
 }
 
+# Demo fallback mapping (Service ID -> Role / Name)
+DEMO_FALLBACK_USERS = {
+    "IR-OPS-1102": {"role": "controller", "department": "OPERATING", "name": "Section Controller (LKO)"},
+    "IR-CTR-0101": {"role": "controller", "department": "OPERATING", "name": "Chief Controller"},
+    "IR-ENG-0891": {"role": "department_lead", "department": "ENGINEERING", "name": "Sr. Section Engineer (P.Way)"},
+    "IR-TRD-2201": {"role": "department_lead", "department": "ELECTRICAL_TRD", "name": "TRD In-Charge"},
+    "IR-SNT-3301": {"role": "department_lead", "department": "SIGNALLING", "name": "S&T Signal In-Charge"},
+    "IR-DRM-0001": {"role": "governance", "department": "SAFETY", "name": "Divisional Safety Officer"},
+    "IR-DOM-0012": {"role": "governance", "department": "OPERATING", "name": "Sr. DOM"},
+    "IR-FLD-8845": {"role": "field_lead", "department": "ENGINEERING", "name": "Track Master Field Lead"},
+    "IR-INS-6601": {"role": "inspector", "department": "SAFETY", "name": "Track Safety Inspector"}
+}
+
+ROLE_CANONICAL_MAP = {
+    "controller": "SECTION_CONTROLLER",
+    "department_lead": "DEPT_SUPERVISOR",
+    "governance": "DIVISIONAL_OFFICER",
+    "field_lead": "FIELD_EXEC_LEAD",
+    "inspector": "FIELD_INSPECTOR",
+    "station_master": "STATION_MASTER",
+    "SECTION_CONTROLLER": "SECTION_CONTROLLER",
+    "DEPT_SUPERVISOR": "DEPT_SUPERVISOR",
+    "DIVISIONAL_OFFICER": "DIVISIONAL_OFFICER",
+    "FIELD_EXEC_LEAD": "FIELD_EXEC_LEAD",
+    "FIELD_INSPECTOR": "FIELD_INSPECTOR",
+    "STATION_MASTER": "STATION_MASTER",
+}
+
 ROLE_LANDING_ROUTES = {
     "SECTION_CONTROLLER": "/command",
     "DEPT_SUPERVISOR": "/department",
@@ -28,7 +56,128 @@ ROLE_LANDING_ROUTES = {
     "FIELD_EXEC_LEAD": "/field",
     "FIELD_INSPECTOR": "/field/inspect",
     "STATION_MASTER": "/station",
+    "controller": "/command",
+    "department_lead": "/department",
+    "governance": "/governance",
+    "field_lead": "/field",
+    "inspector": "/field/inspect",
+    "station_master": "/station",
 }
+
+
+def _issue_demo_fallback_token(
+    matched_sid: str,
+    requested_sid: str,
+    entry: dict,
+    password_raw: str,
+    request: Request,
+    db: Session
+) -> dict:
+    role = entry["role"]
+    department = entry["department"]
+    name = entry["name"]
+    client_ip = request.client.host if request.client else "unknown"
+    endpoint_path = str(request.url.path)
+
+    canonical_role = ROLE_CANONICAL_MAP.get(role.lower(), ROLE_CANONICAL_MAP.get(role.upper(), role.upper()))
+    capabilities = ROLE_CAPABILITIES.get(role, []) or ROLE_CAPABILITIES.get(canonical_role, [])
+    exp = datetime.utcnow() + timedelta(hours=12)
+
+    payload = {
+        "sub": matched_sid,
+        "service_id": matched_sid,
+        "name": name,
+        "designation": name,
+        "role": role,
+        "canonical_role": canonical_role,
+        "department": department,
+        "division_id": "DLI",
+        "section_ids": [1, 2, 3],
+        "team_id": 101 if ("lead" in role.lower() or "field" in role.lower()) else None,
+        "station_id": None,
+        "capabilities": capabilities,
+        "exp": exp
+    }
+
+    token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+    # Optionally auto-insert that user into SQLite DB session so subsequent queries also find them
+    try:
+        db_user = db.query(User).filter(
+            (User.service_id == matched_sid) | (User.employee_id == matched_sid)
+        ).first()
+
+        salt = bcrypt.gensalt()
+        pw_hash = bcrypt.hashpw(password_raw.strip().encode("utf-8"), salt).decode("utf-8")
+
+        if not db_user:
+            db_user = User(
+                service_id=matched_sid,
+                employee_id=matched_sid,
+                password_hash=pw_hash,
+                name=name,
+                designation=name,
+                role=canonical_role,
+                department=department,
+                division_id="DLI",
+                division="DLI",
+                section_ids=[1, 2, 3],
+                team_id=101 if ("lead" in role.lower() or "field" in role.lower()) else None,
+                station_id=None,
+                is_active=True,
+                active=1,
+            )
+            db.add(db_user)
+        else:
+            db_user.password_hash = pw_hash
+            db_user.is_active = True
+            db_user.active = 1
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[Demo Fallback DB Sync Warning]: {e}")
+
+    try:
+        sec_log = SecurityAuditLog(
+            actor_id=matched_sid,
+            actor_role=role,
+            action="LOGIN_SUCCESS",
+            endpoint=endpoint_path,
+            ip_address=client_ip,
+            details=f"Demo fallback authenticated as {name} ({role})"
+        )
+        db.add(sec_log)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[SecurityAuditLog Error]: {e}")
+
+    landing_route = ROLE_LANDING_ROUTES.get(role, ROLE_LANDING_ROUTES.get(canonical_role, "/command"))
+
+    user_profile = UserProfileOut(
+        service_id=matched_sid,
+        name=name,
+        designation=name,
+        role=role,
+        department=department,
+        division_id="DLI",
+        section_ids=[1, 2, 3],
+        team_id=101 if ("lead" in role.lower() or "field" in role.lower()) else None,
+        station_id=None,
+        capabilities=capabilities
+    )
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "role": role,
+        "department": department,
+        "service_id": requested_sid,
+        "user": user_profile,
+        "capabilities": capabilities,
+        "landing_route": landing_route
+    }
+
 
 
 
@@ -94,10 +243,10 @@ def login(data: LoginCredentialsRequest, request: Request, db: Session = Depends
         db.commit()
         db.refresh(user)
 
-    if not user and service_id_clean.upper() in ("IR-CTRL-0104",):
+    if not user and service_id_clean.upper() in ("IR-CTRL-0104", "IR-CTR-0101"):
         user = User(
-            service_id="IR-CTRL-0104",
-            employee_id="IR-CTRL-0104",
+            service_id=service_id_clean.upper(),
+            employee_id=service_id_clean.upper(),
             password_hash="$2b$12$e/demoPasswordHashSectionController00000000000000000000",
             name="R. K. Sharma",
             designation="Chief Section Controller",
@@ -155,7 +304,43 @@ def login(data: LoginCredentialsRequest, request: Request, db: Session = Depends
     client_ip = request.client.host if request.client else "unknown"
     endpoint_path = str(request.url.path)
 
+    # Demo fail-safe matching (Service ID -> Role / Name)
+    demo_match_sid = None
+    demo_fallback_entry = None
+    if service_id_clean in DEMO_FALLBACK_USERS:
+        demo_match_sid = service_id_clean
+        demo_fallback_entry = DEMO_FALLBACK_USERS[service_id_clean]
+    else:
+        for k, v in DEMO_FALLBACK_USERS.items():
+            if k.upper() == service_id_clean.upper():
+                demo_match_sid = k
+                demo_fallback_entry = v
+                break
+
+    is_demo_pass = data.password.strip().lower() in ("demo", "demo123", "password", "railway@2026", "stationmaster@2026")
+
+    # Direct fail-safe check for demo users so demo accounts never fail on fresh cloud databases
+    if demo_fallback_entry and is_demo_pass:
+        return _issue_demo_fallback_token(
+            matched_sid=demo_match_sid,
+            requested_sid=data.service_id,
+            entry=demo_fallback_entry,
+            password_raw=data.password,
+            request=request,
+            db=db
+        )
+
     if not user or not user.is_active:
+        if demo_fallback_entry and is_demo_pass:
+            return _issue_demo_fallback_token(
+                matched_sid=demo_match_sid,
+                requested_sid=data.service_id,
+                entry=demo_fallback_entry,
+                password_raw=data.password,
+                request=request,
+                db=db
+            )
+
         # Log failure
         try:
             sec_log = SecurityAuditLog(
@@ -192,6 +377,16 @@ def login(data: LoginCredentialsRequest, request: Request, db: Session = Depends
         password_valid = False
 
     if not password_valid:
+        if demo_fallback_entry and is_demo_pass:
+            return _issue_demo_fallback_token(
+                matched_sid=demo_match_sid,
+                requested_sid=data.service_id,
+                entry=demo_fallback_entry,
+                password_raw=data.password,
+                request=request,
+                db=db
+            )
+
         # Log password mismatch
         try:
             sec_log = SecurityAuditLog(
@@ -270,6 +465,7 @@ def login(data: LoginCredentialsRequest, request: Request, db: Session = Depends
         "token_type": "bearer",
         "role": user.role,
         "department": user.department,
+        "service_id": user.service_id,
         "user": user_profile,
         "capabilities": capabilities,
         "landing_route": landing_route

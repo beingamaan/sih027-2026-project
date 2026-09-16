@@ -1,4 +1,17 @@
 import os
+
+# ---------------------------------------------------------------------------
+# SQLITE DATABASE PATH ANCHORING (Render / Production / Absolute Path)
+# ---------------------------------------------------------------------------
+# Keep SQLite database path anchored to absolute path: sqlite:////tmp/railway.db or current directory
+_db_env = os.environ.get("DATABASE_URL", "").strip()
+if not _db_env or _db_env.startswith("sqlite:///:memory:") or _db_env.startswith("sqlite:///.") or _db_env == "sqlite:///railway.db":
+    if os.path.exists("/tmp") and os.name != "nt":
+        os.environ["DATABASE_URL"] = "sqlite:////tmp/railway.db"
+    else:
+        _db_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "railway.db"))
+        os.environ["DATABASE_URL"] = f"sqlite:///{_db_file.replace(os.sep, '/')}"
+
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -12,6 +25,7 @@ from app.routes import (
     trains, resources, corridor, events, audit, what_if_route, auth, blocks,
     live_feed
 )
+
 
 app = FastAPI(
     title="AI-Powered Railway Block Planning Engine (SIH26027)",
@@ -107,6 +121,42 @@ def startup_event():
             db.add_all(demo_users)
             db.commit()
             print("[STARTUP] Seeded default demo credentials (IR-ENG-0891, IR-CTR-0101).")
+
+        # 3. Ensure all DEMO_FALLBACK_USERS are present in DB with valid default demo passwords
+        try:
+            from app.routes.auth import DEMO_FALLBACK_USERS, ROLE_CANONICAL_MAP
+            import bcrypt
+            salt = bcrypt.gensalt()
+            demo_pw_hash = bcrypt.hashpw("demo".encode("utf-8"), salt).decode("utf-8")
+            seeded_demo_count = 0
+            for sid, d_info in DEMO_FALLBACK_USERS.items():
+                existing = db.query(User).filter(
+                    (User.service_id == sid) | (User.employee_id == sid)
+                ).first()
+                if not existing:
+                    c_role = ROLE_CANONICAL_MAP.get(d_info["role"].lower(), d_info["role"].upper())
+                    db.add(User(
+                        service_id=sid,
+                        employee_id=sid,
+                        password_hash=demo_pw_hash,
+                        name=d_info["name"],
+                        designation=d_info["name"],
+                        role=c_role,
+                        department=d_info["department"],
+                        division_id="DLI",
+                        division="DLI",
+                        section_ids=[1, 2, 3],
+                        team_id=101 if ("lead" in d_info["role"].lower() or "field" in d_info["role"].lower()) else None,
+                        is_active=True,
+                        active=1
+                    ))
+                    seeded_demo_count += 1
+            if seeded_demo_count > 0:
+                db.commit()
+                print(f"[STARTUP] Seeded {seeded_demo_count} DEMO_FALLBACK_USERS into database.")
+        except Exception as e:
+            db.rollback()
+            print(f"[STARTUP] Demo user fallback seeding warning: {e}")
 
         print(f"[STARTUP] Database verified. Total users registered: {db.query(User).count()}")
 
