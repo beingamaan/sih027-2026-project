@@ -48,6 +48,15 @@ export const OFFICIAL_DEMO_ACCOUNTS: OfficialAccount[] = [
   { serviceId: 'IR-STN-0450', name: 'M. K. Gupta', designation: 'Station Superintendent / Station Master', role: 'STATION_MASTER', department: 'OPS', landingRoute: '/station', avatarInitials: 'MG' },
 ];
 
+export const ROLE_ALIASES: Record<string, RailwayRole> = {
+  controller: 'SECTION_CONTROLLER',
+  department_lead: 'DEPT_SUPERVISOR',
+  governance: 'DIVISIONAL_OFFICER',
+  field_lead: 'FIELD_EXEC_LEAD',
+  inspector: 'FIELD_INSPECTOR',
+  station_master: 'STATION_MASTER',
+};
+
 export const ROLE_CAPABILITIES: Record<RailwayRole, string[]> = {
   SECTION_CONTROLLER: ['VIEW_COMMAND', 'RUN_OPTIMIZER', 'SUBMIT_BLOCK', 'VIEW_TIMETABLE'],
   DEPT_SUPERVISOR: ['VIEW_DEPT', 'VERIFY_TASK', 'UPDATE_READINESS', 'ACK_BLOCK'],
@@ -56,6 +65,7 @@ export const ROLE_CAPABILITIES: Record<RailwayRole, string[]> = {
   FIELD_INSPECTOR: ['REPORT_DEFECT', 'VIEW_INSPECTIONS'],
   STATION_MASTER: ['VIEW_STATION', 'ACK_STATION'],
 };
+
 
 export const RAILWAY_ROLES: Record<RailwayRole, RoleProfile> = {
   SECTION_CONTROLLER: {
@@ -288,7 +298,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const data = res.data;
       const accessToken = data.access_token;
-      const role = (data.role as RailwayRole) || 'SECTION_CONTROLLER';
+      const rawRole = String(data.role || '').toLowerCase();
+      const role = (ROLE_ALIASES[rawRole] || (data.role as RailwayRole)) || 'SECTION_CONTROLLER';
       const caps = data.capabilities || ROLE_CAPABILITIES[role] || [];
       const targetLandingRoute = data.landing_route || getLandingRouteForAccount(serviceId, role);
 
